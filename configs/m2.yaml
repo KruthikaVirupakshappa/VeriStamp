@@ -1,0 +1,11 @@
+_base_: base.yaml
+model:
+  name: m2_clip
+  clip_name: openai/clip-vit-base-patch16     # proposal main: openai/clip-vit-large-patch14
+  frozen: true
+  head: {hidden: 256, dropout: 0.2}
+train:
+  batch_size: 256
+  lr: 1.0e-3
+  weight_decay: 1.0e-4
+  epochs: 30

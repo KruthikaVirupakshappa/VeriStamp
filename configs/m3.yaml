@@ -1,0 +1,12 @@
+_base_: base.yaml
+model:
+  name: m3_hidden
+  strength: 1.0
+loss_weights: {image: 0.7, message: 1.0, adversarial: 0.001}   # starting point; check against the public HiDDeN code you adapt
+noise_layers: [identity, jpeg, resize, crop, screenshot]   # normal edits only (proposal)
+train:
+  batch_size: 32
+  lr: 1.0e-3
+  weight_decay: 1.0e-4
+  epochs: 100
+  coco_images: 10000
