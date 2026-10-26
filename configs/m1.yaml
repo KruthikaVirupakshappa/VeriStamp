@@ -1,0 +1,12 @@
+_base_: base.yaml
+model:
+  name: m1_resnet
+  backbone: resnet50
+  pretrained: imagenet
+  input_channels: 4          # 3 high-pass residual + 1 FFT log-magnitude (TEAM DECISION)
+  high_pass: {kernel_size: 5, sigma: 1.0}
+train:
+  batch_size: 32
+  lr: 1.0e-4
+  weight_decay: 1.0e-4
+  epochs: 10

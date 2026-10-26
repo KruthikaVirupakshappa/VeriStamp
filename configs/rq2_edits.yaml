@@ -1,0 +1,12 @@
+_base_: base.yaml
+# TEAM DECISION: edits and strengths for the RQ2 suite.
+edits:
+  normal:
+    jpeg: {quality: [90, 70, 50]}
+    resize: {scale: [0.75, 0.5]}
+    crop: {keep: [0.9, 0.7]}
+    screenshot: {}
+  ai:
+    vae_roundtrip: {vae: stabilityai/sd-vae-ft-mse}
+    inpainting: {mask_fraction: [0.10, 0.25, 0.50]}
+n_images: 500

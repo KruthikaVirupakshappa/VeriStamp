@@ -1,0 +1,36 @@
+# Shared settings every script inherits. Change these only with a team OK,
+# because a change here invalidates earlier results.
+# Values marked "TEAM DECISION" are the guide's suggested defaults, not final choices yet.
+
+seed: 42
+device: auto            # auto -> cuda, then mps (Apple Silicon), then cpu
+
+paths:
+  raw: data/raw
+  splits: data/splits
+  cache: data/cache
+  experiments: experiments
+  checkpoints: checkpoints
+
+data:
+  # TEAM DECISION: one generator per family so "across families" is testable.
+  generators: [sdv14, adm, biggan]
+  # Images per class per generator. Start tiny, scale up to the proposal's 3k-5k.
+  per_class: 100
+  split_fractions: {train: 0.70, val: 0.15, test: 0.15}
+
+preprocess:
+  # TEAM DECISION: detector resolution. Applied identically to real AND AI images.
+  resize_short_side: 256
+  crop_size: 224
+  jpeg_quality_range: [75, 95]   # every image is re-encoded with a quality drawn from this range
+
+thresholds:
+  # Placeholder values. Real thresholds are fitted on the validation split
+  # and saved per model in checkpoints/thresholds_<model>.json.
+  t_low: 0.35
+  t_high: 0.65
+
+watermark:
+  image_size: 128               # M3 training resolution (proposal)
+  payload_bits: 32              # TEAM DECISION: see watermarking/payload.py for the layout

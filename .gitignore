@@ -1,0 +1,33 @@
+# --- Data and model weights never go in git (share them via the team Drive) ---
+data/raw/
+data/cache/
+data/processed/
+checkpoints/*
+!checkpoints/REGISTRY.csv
+!checkpoints/README.md
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+
+# --- Experiment outputs: commit only the log, not every run folder ---
+experiments/*
+!experiments/runs_log.csv
+!experiments/README.md
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+
+# --- Notebooks: strip outputs before committing (see CONTRIBUTING.md) ---
+.ipynb_checkpoints/
+
+# --- OS / editors ---
+.DS_Store
+.vscode/
+.idea/

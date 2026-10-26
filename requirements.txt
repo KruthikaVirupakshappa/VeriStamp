@@ -1,0 +1,26 @@
+# Python 3.11+ recommended. Minimum versions only, so Colab, Kaggle and
+# M-series Macs all resolve. Once the team has a working environment, run
+#   pip freeze > requirements-lock.txt
+# commit it, and treat that file as the exact environment for final results.
+
+# Core (needed by everyone)
+torch>=2.5
+torchvision>=0.20
+numpy>=1.26
+pillow>=10.4
+pandas>=2.2
+scikit-learn>=1.5
+pyyaml>=6.0
+pytest>=8.3
+
+# Detector backbones (Workstream B): CLIP via Hugging Face
+transformers>=4.46
+
+# Watermark quality metrics + AI edits (Workstream C)
+scikit-image>=0.24
+lpips>=0.1.4
+diffusers>=0.31
+accelerate>=1.1
+
+# Plots / analysis
+matplotlib>=3.9

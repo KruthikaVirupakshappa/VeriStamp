@@ -1,0 +1,11 @@
+_base_: base.yaml
+model:
+  name: fusion
+  inputs: [m1_resnet, m2_clip]
+  standardize: true
+  head: {hidden: 512, dropout: 0.3}
+train:
+  batch_size: 256
+  lr: 1.0e-3
+  weight_decay: 1.0e-4
+  epochs: 30
