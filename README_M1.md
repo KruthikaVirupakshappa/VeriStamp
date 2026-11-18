@@ -191,7 +191,7 @@ The aim is that M2 and Fusion are compared with M1 on **exactly the same images,
 | **Preprocessing** | `vs_native.py` in `vslib_m1_final/`; caches in `cache/<final split>/*_native256.npy` | Same frozen pipeline: native size, JPEG 75–95 (4:2:0, seeded by image ID), central 256 tile aligned to 8. Training: random 224 crop + flip; evaluation: centre 224 crop. Images are 0..1 float tensors; each model normalises internally (CLIP needs its own normalisation and input size inside M2) |
 | **M1 checkpoint** | `experiments/m1_final_n500/hp_fft/best.pt` (RGB: `rgb/best.pt`) | A dict with `model` (state dict), `epoch`, `val_metrics`, …. Load with `vs_models.build_detector("hp_fft", CONFIG)` + `load_state_dict(ck["model"])`, as the notebook's `load_best()` does. The reload reproduces the validation AUROC exactly (0.9518) |
 | **M1 predictions** | `hp_fft/predictions_{val,test_seen,test_unseen}.csv` (+ `_jpeg65`, `_jpeg30` for the test sets) | Columns: `split`, `image_id`, `image_path`, `generator`, `label`, `logit`, `p_ai`, `pred`, `model`, `correct`, `cache_index`. Join with M2 on `image_id` |
-| **2048-d feature vectors** | **Not saved yet** | `model(x)["features"]` returns them (shape [B, 2048]), but no run wrote them to disk. They need one extraction pass (sketch below) |
+| **2048-d feature vectors** | `features/m1_final_n500_hp_fft/` (made by `notebooks/M1_extract_features.ipynb`) | `<split>_features.npy`: float32 [N, 2048], row i = row i of the split CSV. `<split>_index.csv` gives `cache_index`, `image_id`, `generator`, `label`, `logit`, `p_ai` for the same rows. Details below |
 | **Evaluation code** | `vs_metrics.py`; Sections 19, 23 and 24 of the final notebook | `classification_metrics(labels, p_ai)` gives accuracy, AUROC, precision, recall, F1 and the confusion matrix at 0.5. Section 23 has the paired bootstrap AUROC comparison (2,000 resamples, stratified). Section 24 has the JPEG 65/30 test |
 | **Metrics and plots** | `metrics.json`, `results_summary.csv`, `comparison/`, `jpeg_degradation/`, `gradcam/`, `plots/` | M1 reference numbers for the RQ1 table |
 
@@ -200,31 +200,26 @@ The aim is that M2 and Fusion are compared with M1 on **exactly the same images,
 - `test_unseen` must not be used for tuning. The Stable Diffusion test set has already been used once for the final preprocessing choice; future decisions should be based on validation data.
 - Report M2 and Fusion with the same paired bootstrap against M1 on the same images.
 
-### Extracting the 2048-d features (not yet run)
-An **untested sketch**, to run inside the final notebook after Section 16 (it uses the notebook's `load_best`, `LOADERS`, `SPLITS`, `RUN_DIRS` and `DEVICE`).
-- It uses the **un-augmented** training loader (`train_eval`), so training features match how test images look.
-- It writes into `m1_final_n500/hp_fft/features/` only.
+### The saved 2048-d features
+`notebooks/M1_extract_features.ipynb` loaded `hp_fft/best.pt` (no training) and saved one 2,048-number vector per image. The vector is the pooled ResNet-50 output, i.e. the input of M1's final layer.
 
-```python
-import numpy as np, torch
+| Split | Shape | AUROC from these features | AUROC in saved predictions |
+|---|---|---|---|
+| train | (1400, 2048) | 0.9999 | (not saved during training) |
+| val | (300, 2048) | 0.9511 | 0.9518 |
+| test_seen | (300, 2048) | 0.9374 | 0.9371 |
+| test_unseen | (1000, 2048) | 0.7123 | 0.7117 |
 
-FEAT_DIR = RUN_DIRS["hp_fft"] / "features"
-FEAT_DIR.mkdir(exist_ok=True)
-model, _ = load_best("hp_fft")                      # M1 best.pt, eval mode
-for split in ["train_eval", "val", "test_seen", "test_unseen"]:
-    feats, idx = [], []
-    with torch.no_grad():
-        for b in LOADERS[split]:
-            out = model(b["x"].to(DEVICE))           # float32: no autocast
-            feats.append(out["features"].cpu().numpy())
-            idx.append(b["idx"].numpy())
-    feats, idx = np.concatenate(feats), np.concatenate(idx)
-    order = np.argsort(idx)                          # row order of the split CSV
-    np.save(FEAT_DIR / f"features_{split}.npy", feats[order].astype(np.float32))
-    print(split, feats.shape)                        # expect (n_images, 2048)
-```
-
-Before relying on it, check that row *i* of each file matches row *i* of the split CSV (`train_eval` corresponds to `train.csv`).
+- **All splits use the evaluation crop:** the centre 224 crop of the valid region, offset a multiple of 8. No augmentation, train included. Computed in float32; the training run scored in bfloat16, hence the small AUROC differences.
+- **Checks passed:**
+  - cache fingerprints match the split CSVs;
+  - logit correlation with the saved predictions ≥ 0.9997, and Real/AI prediction agreement ≥ 99.3%;
+  - same image order, no NaN, and the reloaded files match what was computed.
+- **Provenance:** `features_info.json` records the checkpoint SHA-256 (`5b4d9baa…167cd`), split fingerprints and preprocessing. `feature_checks.csv` holds the comparison table.
+- **Caution for Fusion:**
+  - M1 almost perfectly separates its own training images (AUROC 0.9999), so train-split features are far more confident than on new images.
+  - A Fusion model trained on them may learn to over-trust M1.
+  - Consider fitting Fusion on validation features (with cross-validation), or at least checking for this on val.
 
 ---
 
@@ -233,9 +228,10 @@ Before relying on it, check that row *i* of each file matches row *i* of the spl
 Every number in this file and in `docs/M1_ANALYSIS.md` comes from the printed outputs of:
 - `notebooks/M1_run001_executed.ipynb`
 - `notebooks/M1_random_rescale.ipynb`
+- `notebooks/M1_extract_features.ipynb` (2048-d features; executed copy, committed)
 - `notebooks/M1_resize_vqdm_executed.ipynb`
 - `notebooks/M1_native_crop_equal_jpeg_executed.ipynb`
-- `notebooks/M1_final_n500_executed.ipynb` (committed to git; the other four are not), especially:
+- `notebooks/M1_final_n500_executed.ipynb` (committed to git, like `M1_extract_features.ipynb`; the other four are not), especially:
   - Section 19 (metrics);
   - Section 23 (paired comparisons across all runs);
   - Section 24 (JPEG degradation);

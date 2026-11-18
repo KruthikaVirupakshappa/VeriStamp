@@ -263,7 +263,7 @@ For a batch of B images, `model(x)` returns:
 | `pred` | [B] | 1 if P(AI) ≥ 0.5, else 0 |
 | `features` | [B, 2048] | ResNet-50 feature vector, intended for Fusion |
 
-The 2048-d feature vector is produced on every forward pass and was checked in the smoke test (shape (2, 2048)). However, **feature vectors were not saved to disk** in any run; only predictions were saved. See the handover in [`README_M1.md`](../README_M1.md).
+The 2048-d feature vector is produced on every forward pass and was checked in the smoke test (shape (2, 2048)). The training runs saved only predictions. The features were extracted afterwards from `hp_fft/best.pt` by `notebooks/M1_extract_features.ipynb`, with no retraining, into `features/m1_final_n500_hp_fft/`. Scores recomputed from them reproduce the saved predictions (val AUROC 0.9511 vs 0.9518, test_unseen 0.7123 vs 0.7117). See the handover in [`README_M1.md`](../README_M1.md).
 
 ### Training settings (identical in all runs)
 
