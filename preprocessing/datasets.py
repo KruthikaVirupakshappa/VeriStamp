@@ -9,6 +9,10 @@ in-distribution splits with all generators.
 """
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
+import numpy as np
 import pandas as pd
 import torch
 from torch.utils.data import Dataset
@@ -40,3 +44,64 @@ class ManifestDataset(Dataset):
         x01 = preprocess(load_rgb(r["path"]), r["image_id"], self.cfg)
         meta = {"image_id": r["image_id"], "generator": r["generator"], "split": r["split"]}
         return x01, torch.tensor(int(r["label"])), meta
+
+
+class NativeCacheDataset(Dataset):
+    """Read one of M1's frozen native 256-pixel caches.
+
+    The cache rows are aligned with the rows of the corresponding split CSV.
+    This dataset deliberately does not open the original image paths, so M2 can
+    run from the shared native caches even when the original Drive paths are not
+    mounted on the local machine.
+    """
+
+    def __init__(self, split_csv: str | Path, cache_file: str | Path,
+                 crop_size: int = 224, align: int = 8):
+        self.rows = pd.read_csv(split_csv).reset_index(drop=True)
+        self.cache_file = Path(cache_file)
+        if not self.cache_file.exists():
+            raise FileNotFoundError(f"Native cache not found: {self.cache_file}")
+        self.array = np.load(self.cache_file, mmap_mode="r")
+        if len(self.array) != len(self.rows):
+            raise ValueError(
+                f"Cache/CSV row mismatch for {self.cache_file}: "
+                f"{len(self.array)} cache rows vs {len(self.rows)} CSV rows"
+            )
+        self.crop_size = crop_size
+        self.align = align
+        meta_path = self.cache_file.with_suffix(".json")
+        self.valid_h = self.valid_w = None
+        if meta_path.exists():
+            metadata = json.loads(meta_path.read_text())
+            self.valid_h = metadata.get("valid_h")
+            self.valid_w = metadata.get("valid_w")
+
+    def __len__(self):
+        return len(self.rows)
+
+    def __getitem__(self, i: int):
+        row = self.rows.iloc[i]
+        tile = np.asarray(self.array[i])
+        if tile.ndim != 3:
+            raise ValueError(f"Expected an image tile, got shape {tile.shape}")
+        if tile.shape[-1] == 3:
+            h, w = tile.shape[:2]
+            tile = tile[:h, :w, :]
+        elif tile.shape[0] == 3:
+            tile = np.transpose(tile, (1, 2, 0))
+            h, w = tile.shape[:2]
+        else:
+            raise ValueError(f"Expected 3-channel cache tile, got shape {tile.shape}")
+        vh = int(self.valid_h[i]) if self.valid_h is not None else h
+        vw = int(self.valid_w[i]) if self.valid_w is not None else w
+        if min(vh, vw) < self.crop_size:
+            raise ValueError(f"Cache row {i} is smaller than {self.crop_size}px")
+        top = ((vh - self.crop_size) // 2) // self.align * self.align
+        left = ((vw - self.crop_size) // 2) // self.align * self.align
+        crop = np.ascontiguousarray(tile[top:top + self.crop_size, left:left + self.crop_size])
+        x01 = torch.from_numpy(crop).permute(2, 0, 1).float()
+        if x01.max() > 1:
+            x01 = x01 / 255.0
+        meta = {"image_id": row["image_id"], "generator": row["generator"],
+                "split": row.get("split", ""), "cache_index": i}
+        return x01, torch.tensor(int(row["label"])), meta

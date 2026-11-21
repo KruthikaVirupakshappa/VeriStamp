@@ -1,11 +1,24 @@
 _base_: base.yaml
+data:
+  generators: [ADM, VQDM, stable_diffusion_v_1_4]
+  per_class: 500
+  # Final M1 split CSVs and native caches are stored in the two local artifact folders.
+  split_dir: "/Users/supriya/Documents/groupprojectdl/VeriStamp 3/data/splits/genimage_seen-ADM-VQDM_unseen-stable_diffusion_v_1_4_min224_n500_seed42__m1_final_n500"
+  native_cache_dir: "/Users/supriya/Documents/groupprojectdl/VeriStamp 2/cache/genimage_seen-ADM-VQDM_unseen-stable_diffusion_v_1_4_min224_n500_seed42__m1_final_n500"
+  manifest: "/Users/supriya/Documents/groupprojectdl/VeriStamp 2/data/splits/genimage_seen-ADM-VQDM_unseen-stable_diffusion_v_1_4_min224_n500_seed42__m1_final_n500/manifest.csv"
 model:
   name: m2_clip
-  clip_name: openai/clip-vit-base-patch16     # proposal main: openai/clip-vit-large-patch14
+  # M4 Pro-friendly first run. Switch to openai/clip-vit-large-patch14 for the proposal main result.
+  clip_name: openai/clip-vit-base-patch16
   frozen: true
   head: {hidden: 256, dropout: 0.2}
+preprocess:
+  mode: native_cache
+  crop_size: 224
+  align: 8
 train:
-  batch_size: 256
+  batch_size: 64
   lr: 1.0e-3
   weight_decay: 1.0e-4
   epochs: 30
+  patience: 5
