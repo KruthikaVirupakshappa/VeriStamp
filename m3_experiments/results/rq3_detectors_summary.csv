@@ -1,0 +1,2 @@
+detector,n_real,n_ai,score_change_real,score_change_ai,ci95_real_low,ci95_real_high,ci95_ai_low,ci95_ai_high,mean_abs_change,max_abs_change,wilcoxon_p,verdict_flips,flip_rate,real_to_ai,ai_to_real,into_uncertain,out_of_uncertain,accuracy_before,accuracy_after,auroc_before,auroc_after
+m1_resnet,300,300,0.0048550619578024146,-0.007575141121810678,-0.004789410015179783,0.014655272753525949,-0.020356693891901687,0.005711787954999736,0.04809097842515334,0.5662672519683838,0.7308980878919664,51,0.085,2,2,22,25,0.675,0.6716666666666666,0.7535444444444445,0.7478666666666667

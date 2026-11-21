@@ -1,0 +1,7 @@
+edit,variant,n_photos,bit_accuracy,valid_verdict,invalidation_rate,all_32_bits_correct,wrong_but_valid
+"Inpainting, 10% mask",composited,200,0.99625,0.92,0.07999999999999996,0.92,0
+"Inpainting, 10% mask",raw model output,200,0.87,0.05,0.95,0.05,0
+"Inpainting, 25% mask",composited,200,0.97796875,0.505,0.495,0.505,0
+"Inpainting, 25% mask",raw model output,200,0.83265625,0.02,0.98,0.02,0
+"Inpainting, 50% mask",composited,200,0.86625,0.025,0.975,0.025,0
+"Inpainting, 50% mask",raw model output,200,0.76015625,0.0,1.0,0.0,0

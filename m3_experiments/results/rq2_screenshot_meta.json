@@ -1,0 +1,22 @@
+{
+  "false_valid_unstamped": [
+    {
+      "edit": "Screenshot simulation (all steps)",
+      "n_photos": 500,
+      "read_as_valid": 0,
+      "false_valid_rate": 0.0
+    }
+  ],
+  "seed": 42,
+  "steps": "resize 0.8 bilinear -> GaussianBlur(0.5) -> brightness, contrast x U(0.95,1.05) -> resize back bilinear -> PNG",
+  "environment": {
+    "python": "3.13.16",
+    "torch": "2.11.0+cu130",
+    "cuda": true,
+    "date": "2026-11-21 02:14:38",
+    "gpu": "Tesla T4",
+    "diffusers": "0.42.0",
+    "transformers": "5.20.2",
+    "skimage": "0.25.2"
+  }
+}

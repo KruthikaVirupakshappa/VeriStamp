@@ -1,0 +1,24 @@
+{
+  "model": "stable-diffusion-v1-5/stable-diffusion-inpainting",
+  "prompt": "a natural photo",
+  "steps": 30,
+  "guidance": 7.5,
+  "n_photos": 200,
+  "subset": "first 200 of the 500 test photos after a shuffle with seed 42",
+  "fractions": [
+    0.1,
+    0.25,
+    0.5
+  ],
+  "size": 512,
+  "environment": {
+    "python": "3.13.16",
+    "torch": "2.11.0+cu130",
+    "cuda": true,
+    "date": "2026-11-21 03:43:26",
+    "gpu": "Tesla T4",
+    "diffusers": "0.42.0",
+    "transformers": "5.20.2",
+    "skimage": "0.25.2"
+  }
+}

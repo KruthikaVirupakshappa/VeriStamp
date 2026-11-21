@@ -1,0 +1,64 @@
+{
+  "table": [
+    {
+      "edit": "PNG",
+      "bit_accuracy_%": 99.85,
+      "guide_bits_%": 99.85,
+      "valid_verdict_%": 96.0,
+      "guide_valid_%": 96.0,
+      "invalidation_rate_%": 4.0,
+      "match": "True"
+    },
+    {
+      "edit": "JPEG 90",
+      "bit_accuracy_%": 99.83,
+      "guide_bits_%": 99.83,
+      "valid_verdict_%": 95.2,
+      "guide_valid_%": 95.2,
+      "invalidation_rate_%": 4.8,
+      "match": "True"
+    },
+    {
+      "edit": "JPEG 70",
+      "bit_accuracy_%": 99.58,
+      "guide_bits_%": 99.58,
+      "valid_verdict_%": 90.0,
+      "guide_valid_%": 90.0,
+      "invalidation_rate_%": 10.0,
+      "match": "True"
+    },
+    {
+      "edit": "JPEG 50",
+      "bit_accuracy_%": 98.75,
+      "guide_bits_%": 98.75,
+      "valid_verdict_%": 72.4,
+      "guide_valid_%": 72.4,
+      "invalidation_rate_%": 27.6,
+      "match": "True"
+    },
+    {
+      "edit": "Resized to 224",
+      "bit_accuracy_%": 99.82,
+      "guide_bits_%": 99.83,
+      "valid_verdict_%": 95.2,
+      "guide_valid_%": 95.4,
+      "invalidation_rate_%": 4.8,
+      "match": "True"
+    }
+  ],
+  "psnr": 31.50408980675204,
+  "unstamped_valid": 0,
+  "ok": true,
+  "model_epoch": 97,
+  "model_sha256": "3400e912bb4d2a98e1f37a36045e4d067d78c814688009d65da6928bf2248fe1",
+  "environment": {
+    "python": "3.13.16",
+    "torch": "2.11.0+cu130",
+    "cuda": true,
+    "date": "2026-11-21 02:02:39",
+    "gpu": "Tesla T4",
+    "diffusers": "0.42.0",
+    "transformers": "5.20.2",
+    "skimage": "0.25.2"
+  }
+}

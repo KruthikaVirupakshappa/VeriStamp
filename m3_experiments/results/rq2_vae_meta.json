@@ -1,0 +1,30 @@
+{
+  "vae": "stabilityai/sd-vae-ft-mse",
+  "size": 512,
+  "latent": "mode (mean)",
+  "resize": "bicubic",
+  "false_valid_unstamped": [
+    {
+      "edit": "Resize to 512 and back (control)",
+      "n_photos": 500,
+      "read_as_valid": 0,
+      "false_valid_rate": 0.0
+    },
+    {
+      "edit": "VAE round trip",
+      "n_photos": 500,
+      "read_as_valid": 0,
+      "false_valid_rate": 0.0
+    }
+  ],
+  "environment": {
+    "python": "3.13.16",
+    "torch": "2.11.0+cu130",
+    "cuda": true,
+    "date": "2026-11-21 02:47:08",
+    "gpu": "Tesla T4",
+    "diffusers": "0.42.0",
+    "transformers": "5.20.2",
+    "skimage": "0.25.2"
+  }
+}

@@ -1,0 +1,8 @@
+edit,n_photos,bit_accuracy,valid_verdict,invalidation_rate,all_32_bits_correct,wrong_but_valid
+No edit (PNG),500,0.998625,0.968,0.03200000000000003,0.968,0
+Resize to 80% only,500,0.9985625,0.966,0.03400000000000003,0.966,0
+Resize to 80% and back,500,0.99825,0.958,0.04200000000000004,0.958,0
+Gaussian blur r=0.5 only,500,0.998625,0.968,0.03200000000000003,0.968,0
+Brightness/contrast +-5% only,500,0.9979375,0.958,0.04200000000000004,0.958,0
+Screenshot simulation (all steps),500,0.997125,0.942,0.05800000000000005,0.942,0
+Screenshot simulation + JPEG 90,500,0.9955625,0.906,0.09399999999999997,0.906,0

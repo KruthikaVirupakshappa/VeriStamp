@@ -1,0 +1,19 @@
+{
+  "n_per_class": 300,
+  "split_dir": "/kaggle/input/veristamp-m3-inputs/veristamp-m3-inputs (3)/genimage/splits",
+  "seed": 42,
+  "false_valid_unstamped": {
+    "AI": 0,
+    "Real": 0
+  },
+  "environment": {
+    "python": "3.13.16",
+    "torch": "2.11.0+cu130",
+    "cuda": true,
+    "date": "2026-11-21 03:47:46",
+    "gpu": "Tesla T4",
+    "diffusers": "0.42.0",
+    "transformers": "5.20.2",
+    "skimage": "0.25.2"
+  }
+}
