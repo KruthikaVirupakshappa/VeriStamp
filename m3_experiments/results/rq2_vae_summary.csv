@@ -1,0 +1,3 @@
+edit,n_photos,bit_accuracy,valid_verdict,invalidation_rate,all_32_bits_correct,wrong_but_valid
+Resize to 512 and back (control),500,0.9985625,0.968,0.03200000000000003,0.968,0
+VAE round trip,500,0.903875,0.136,0.864,0.136,0

@@ -1,0 +1,15 @@
+{
+  "n_photos": 500,
+  "lpips_net": "alex",
+  "ssim": "skimage structural_similarity, channel_axis=2, data_range=255, full size",
+  "environment": {
+    "python": "3.13.16",
+    "torch": "2.11.0+cu130",
+    "cuda": true,
+    "date": "2026-11-21 02:16:32",
+    "gpu": "Tesla T4",
+    "diffusers": "0.42.0",
+    "transformers": "5.20.2",
+    "skimage": "0.25.2"
+  }
+}
