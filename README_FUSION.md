@@ -73,7 +73,9 @@ The test sets are not used to select thresholds. The threshold files and three-w
 
 JPEG degradation was evaluated at quality 65 and quality 30. For each original image, the complete original image was re-encoded as JPEG using 4:2:0 subsampling. The decoded image was then passed through the same native centre-crop preprocessing used by the detectors.
 
-This is a feature-level Early-Fusion evaluation. New degraded M1 features and new degraded M2 embeddings were extracted before applying the trained Fusion classifier. The existing probability CSVs were not reused as a substitute for degraded feature vectors.
+For Early Fusion, this is a feature-level evaluation. New degraded M1 features and new degraded M2 embeddings were extracted before applying the trained Fusion classifier. For Late Fusion, new M1 and M2 probabilities were computed from those same degraded images and then averaged. The existing clean-image probability CSVs were not reused.
+
+### Early Fusion JPEG results
 
 | Quality | Split | Stable Diffusion held out | ADM held out | VQDM held out | Mean | Sample standard deviation |
 |---|---|---:|---:|---:|---:|---:|
@@ -82,7 +84,16 @@ This is a feature-level Early-Fusion evaluation. New degraded M1 features and ne
 | JPEG30 | test_seen | 0.8784 | 0.8741 | 0.8348 | 0.8624 | 0.0241 |
 | JPEG30 | test_unseen | 0.6179 | 0.7647 | 0.8461 | 0.7429 | 0.1156 |
 
-JPEG65 causes a moderate drop on the unseen tests. JPEG30 causes a larger drop, especially for the Stable Diffusion fold. This means that compression removes or changes some of the low-level information used by the feature detectors.
+### Late Fusion JPEG results
+
+| Quality | Split | Stable Diffusion held out | ADM held out | VQDM held out | Mean | Sample standard deviation |
+|---|---|---:|---:|---:|---:|---:|
+| JPEG65 | test_seen | 0.9637 | 0.9491 | 0.9377 | 0.9501 | 0.0130 |
+| JPEG65 | test_unseen | 0.8073 | 0.9005 | 0.9362 | 0.8813 | 0.0665 |
+| JPEG30 | test_seen | 0.9213 | 0.9139 | 0.8772 | 0.9042 | 0.0236 |
+| JPEG30 | test_unseen | 0.6682 | 0.8018 | 0.8579 | 0.7760 | 0.0974 |
+
+JPEG65 causes a moderate drop on the unseen tests. JPEG30 causes a larger drop, especially for the Stable Diffusion fold. Late Fusion remains stronger than Early Fusion under both JPEG qualities, although it also loses performance as compression becomes stronger. This means that compression removes or changes some of the information used by the detectors.
 
 ## Files and outputs
 
@@ -105,7 +116,7 @@ The exact JPEG evaluation outputs are saved under:
 experiments/fusion_jpeg_m1_m2_aligned_n500_seed42/
 ```
 
-The JPEG output contains the degraded M1 and M2 feature arrays, row-alignment indexes, prediction files, and metrics for both test splits and both JPEG qualities.
+The JPEG output contains the degraded M1 and M2 feature arrays, row-alignment indexes, Early-Fusion prediction files, Late-Fusion prediction files, and metrics for both test splits and both JPEG qualities.
 
 The main training script is:
 
@@ -121,7 +132,7 @@ training/evaluate_fusion_jpeg.py
 
 ## Conclusion
 
-Fusion was completed for all three leave-one-generator-out folds, including validation-based three-way decisions and exact JPEG65/JPEG30 Early-Fusion evaluation.
+Fusion was completed for all three leave-one-generator-out folds, including validation-based three-way decisions and exact JPEG65/JPEG30 evaluation for both Early and Late Fusion.
 
 Early Fusion demonstrates that feature concatenation is possible, but its nearly perfect training performance and lower unseen-generator AUROC show that it overfits in this dataset size and setup. Late Fusion is the more reliable Fusion method because it has higher mean unseen AUROC and lower variation across folds.
 

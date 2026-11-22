@@ -1,9 +1,9 @@
-"""Evaluate trained Early Fusion on exact whole-image JPEG degradations.
+"""Evaluate trained Early and Late Fusion on exact whole-image JPEG degradations.
 
 The command reads authoritative fold CSVs, re-encodes each original image at
 the requested JPEG quality, applies the same native centre crop used by M1/M2,
-extracts M1 and M2 feature vectors, and evaluates the already-trained Early
-Fusion head.  No split is created and no artifact path is guessed.
+extracts M1 and M2 feature vectors, and evaluates the already-trained Fusion
+heads. No split is created and no artifact path is guessed.
 """
 from __future__ import annotations
 
@@ -119,12 +119,17 @@ def load_m2(checkpoint: Path, device):
 
 @torch.no_grad()
 def extract_features(m1, m2, loader, device):
-    m1_features, m2_features, labels, ids, generators, paths, rows = [], [], [], [], [], [], []
+    m1_features, m2_features, m1_probs, m2_probs = [], [], [], []
+    labels, ids, generators, paths, rows = [], [], [], [], []
     for x01, metadata in loader:
         x01 = x01.to(device)
         m1_out = m1(x01)
-        m2_features.append(m2.encode(x01).cpu())
+        m2_emb = m2.encode(x01)
+        m2_p_ai = torch.sigmoid(m2.logits_from_embeddings(m2_emb))
+        m2_features.append(m2_emb.cpu())
         m1_features.append(m1_out["features"].cpu())
+        m1_probs.append(m1_out["prob"].cpu())
+        m2_probs.append(m2_p_ai.cpu())
         labels.extend(item["label"] for item in metadata)
         ids.extend(item["image_id"] for item in metadata)
         generators.extend(item["generator"] for item in metadata)
@@ -134,6 +139,8 @@ def extract_features(m1, m2, loader, device):
         raise ValueError("No images found in split")
     return {
         "m1": torch.cat(m1_features), "m2": torch.cat(m2_features),
+        "m1_p_ai": torch.cat(m1_probs).numpy(),
+        "m2_p_ai": torch.cat(m2_probs).numpy(),
         "labels": np.asarray(labels, dtype=np.int64), "ids": ids,
         "generators": generators, "paths": paths, "rows": rows,
     }
@@ -144,6 +151,27 @@ def evaluate(fusion, features, thresholds, device):
     logits = fusion.logits_from_features(features["m1"].to(device),
                                          features["m2"].to(device)).cpu()
     p_ai = torch.sigmoid(logits).numpy()
+    labels = features["labels"]
+    verdicts = np.asarray([to_verdict(float(p), thresholds["t_low"], thresholds["t_high"])
+                           for p in p_ai])
+    expected = np.where(labels == 1, "AI", "Real")
+    decided = verdicts != "Uncertain"
+    return {
+        "n": int(len(labels)),
+        "auroc": float(roc_auc_score(labels, p_ai)),
+        "accuracy": float(accuracy_score(labels, p_ai >= 0.5)),
+        "decided": int(decided.sum()),
+        "coverage": float(decided.mean()),
+        "accuracy_on_decided": float((verdicts[decided] == expected[decided]).mean())
+        if decided.any() else 0.0,
+        "uncertain": int((~decided).sum()),
+        "p_ai": p_ai,
+        "verdicts": verdicts,
+    }
+
+
+def evaluate_late(features, thresholds):
+    p_ai = (features["m1_p_ai"] + features["m2_p_ai"]) / 2.0
     labels = features["labels"]
     verdicts = np.asarray([to_verdict(float(p), thresholds["t_low"], thresholds["t_high"])
                            for p in p_ai])
@@ -219,8 +247,10 @@ def main():
         m2_checkpoint = m2_root / f"m2_final_n500_fold_{fold_name}" / "best.pt"
         fusion_dir = fusion_root / f"fold_{fold_name}"
         fusion_checkpoint = fusion_dir / "best.pt"
-        threshold_path = fusion_dir / "early_thresholds.json"
-        for required in (split_dir, m1_checkpoint, m2_checkpoint, fusion_checkpoint, threshold_path):
+        early_threshold_path = fusion_dir / "early_thresholds.json"
+        late_threshold_path = fusion_dir / "late_thresholds.json"
+        for required in (split_dir, m1_checkpoint, m2_checkpoint, fusion_checkpoint,
+                         early_threshold_path, late_threshold_path):
             if not required.exists():
                 raise FileNotFoundError(f"Required artifact not found: {required}")
 
@@ -230,7 +260,8 @@ def main():
                                 m2_dim=int(fusion_checkpoint_data["m2_dim"])).to(device)
         fusion.load_state_dict(fusion_checkpoint_data["model"], strict=True)
         fusion.eval()
-        thresholds = load_json(threshold_path)
+        early_thresholds = load_json(early_threshold_path)
+        late_thresholds = load_json(late_threshold_path)
         m1, m1_cfg = load_m1(m1_checkpoint, m1_model_dir, m1_feature_dir, device)
         m2 = load_m2(m2_checkpoint, device)
         preprocess_cfg = m1_cfg.get("preprocess", {})
@@ -252,28 +283,38 @@ def main():
                 features = extract_features(m1, m2, loader, device)
                 split_output = output_root / f"fold_{fold_name}" / f"jpeg{quality}" / split
                 save_features(split_output, features)
-                result = evaluate(fusion, features, thresholds, device)
-                p_ai = result.pop("p_ai")
-                verdicts = result.pop("verdicts")
+                early_result = evaluate(fusion, features, early_thresholds, device)
+                late_result = evaluate_late(features, late_thresholds)
+                early_p_ai = early_result.pop("p_ai")
+                early_verdicts = early_result.pop("verdicts")
+                late_p_ai = late_result.pop("p_ai")
+                late_verdicts = late_result.pop("verdicts")
                 pd.DataFrame({"row": features["rows"], "image_id": features["ids"],
                               "generator": features["generators"], "label": features["labels"],
-                              "p_ai": p_ai, "verdict": verdicts}).to_csv(
+                              "p_ai": early_p_ai, "verdict": early_verdicts}).to_csv(
                                   split_output / "predictions.csv", index=False)
-                quality_summary[split] = result
+                pd.DataFrame({"row": features["rows"], "image_id": features["ids"],
+                              "generator": features["generators"], "label": features["labels"],
+                              "m1_p_ai": features["m1_p_ai"], "m2_p_ai": features["m2_p_ai"],
+                              "p_ai": late_p_ai, "verdict": late_verdicts}).to_csv(
+                    split_output / "predictions_late.csv", index=False)
+                quality_summary[split] = {"early_fusion": early_result,
+                                          "late_fusion": late_result}
             fold_summary[str(quality)] = quality_summary
 
         (output_root / f"fold_{fold_name}").mkdir(parents=True, exist_ok=True)
         (output_root / f"fold_{fold_name}" / "metrics.json").write_text(
             json.dumps({"method": "whole original image JPEG re-encode, then native crop",
                         "qualities": [int(q) for q in args.quality],
-                        "threshold_source": str(threshold_path),
+                        "early_threshold_source": str(early_threshold_path),
+                        "late_threshold_source": str(late_threshold_path),
                         "results": fold_summary}, indent=2))
         summary[fold_name] = fold_summary
         print(json.dumps({fold_name: fold_summary}, indent=2))
 
     (output_root / "summary.json").parent.mkdir(parents=True, exist_ok=True)
     (output_root / "summary.json").write_text(json.dumps(summary, indent=2))
-    print(f"Saved Early-Fusion JPEG evaluation to {output_root}")
+    print(f"Saved Early- and Late-Fusion JPEG evaluation to {output_root}")
 
 
 if __name__ == "__main__":
