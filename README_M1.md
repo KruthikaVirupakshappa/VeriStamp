@@ -13,12 +13,37 @@ The question M1 answers for VeriStamp (RQ1): *do frequency/noise features detect
 
 ---
 
-## Final result (`m1_final_n500`)
+## Final result: three leave-one-generator-out folds
+
+The final setup was run three times, holding out a different generator each time. Everything else is identical:
+- the same 7,800 images, 500 per class per generator;
+- seed 42;
+- native 224 crops with equal JPEG;
+- the same model and training settings.
+
+| Fold | Run | Seen (train/val/test_seen) | Unseen (test only) | RGB AUROC | M1 AUROC | M1 − RGB [95% CI] |
+|---|---|---|---|---|---|---|
+| 1 | `m1_final_n500` | ADM, VQDM | **Stable Diffusion v1.4** | 0.681 | 0.712 | **+0.031 [0.001, 0.059]** |
+| 2 | `m1_final_n500_unseen_adm` | VQDM, SD v1.4 | **ADM** | 0.816 | 0.866 | **+0.050 [0.028, 0.072]** |
+| 3 | `m1_final_n500_unseen_vqdm` | ADM, SD v1.4 | **VQDM** | 0.886 | 0.889 | +0.004 [−0.016, 0.023] |
+| **Mean** | | | | **0.794** | **0.822** | **+0.028** |
+
+(n = 1,000 unseen images per fold. Paired bootstrap on the same images.)
+
+**In plain words:**
+- On the unseen generator, M1 was at least as good as RGB in every fold. It was clearly better on Stable Diffusion and ADM, and equal on VQDM.
+- The folds are not equally hard. VQDM is the easiest held-out generator (both models score about 0.89), probably because it resembles ADM. So report the per-fold rows first and the mean second.
+- On **seen** generators there is no M1 advantage in any fold. The test_seen differences are −0.010, −0.009 and −0.009, all with intervals that include 0.
+- **Strong JPEG compression (quality 30) removes M1's advantage in every fold:** +0.007, 0.000 and +0.012, all with intervals that include 0.
+
+One seed and 500 per class: interim evidence, not a final benchmark. See [Section 10 of the analysis](docs/M1_ANALYSIS.md#10-final-m1-conclusion).
+
+### Fold 1 in detail (`m1_final_n500`)
 
 Setup:
 - GenImage subset, 500 images per class per generator (interim level).
 - Trained on ADM + VQDM; Stable Diffusion v1.4 held out as the unseen test generator.
-- Seed 42, one fold.
+- Seed 42.
 - Native 224×224 crops (no resizing) and equal JPEG for Real and AI.
 
 | Test set | n | RGB AUROC | M1 AUROC | M1 − RGB [95% CI] | M1 accuracy | M1 recall (AI caught) |
@@ -34,7 +59,7 @@ Setup:
 - Both models still miss most Stable Diffusion images at the default 0.5 threshold.
 - Strong JPEG compression removes M1's advantage.
 
-This is one seed and one fold, not a final benchmark. See [Section 10 of the analysis](docs/M1_ANALYSIS.md#10-final-m1-conclusion).
+Folds 2 and 3 have the same tables (seen, unseen, JPEG 65/30, Grad-CAM) in their own `M1_FINAL_SUMMARY.md`. A summary is in [Section 7.7 of the analysis](docs/M1_ANALYSIS.md#77-three-fold-evaluation).
 
 ---
 
@@ -74,12 +99,15 @@ flowchart TD
    - it mounts Drive, checks which generators exist (VQDM replaces BigGAN), and extracts 650 images per image folder into `MyDrive/Datasets/GenImage_native_n500/`;
    - it stops at **0.11**. Look at the sample grid in **0.9** (AI images should look generated, Real ones like photos), set `LABELS_CONFIRMED = True`, and rerun 0.11 and 0.12.
 3. Run **Sections 1–27** in order. Nothing else needs editing.
-4. Check these outputs:
+4. **Folds 2 and 3:** open `notebooks/M1_folds_n500.ipynb`, set `FOLD = 2` (unseen ADM) or `FOLD = 3` (unseen VQDM), and run all.
+   - There is no Section 0: this notebook reuses the fold 1 dataset folder and only reads it.
+   - Fold 1 must exist first: its split is read to confirm the settings are identical.
+5. Check these outputs:
 
 | Section | Expected |
 |---|---|
 | 7 | Every leakage check PASS. Split sizes 1400 / 300 / 300 / 1000 |
-| 7b | "Every usable m1_run_001 unseen image is in test_unseen": PASS (391 of 400) |
+| 7b | Fold 1: "Every usable m1_run_001 unseen image is in test_unseen" PASS (391 of 400). Folds 2/3: "Unseen generator is the FOLD choice" and "Same settings as fold 1" PASS |
 | 14 | ALL SANITY CHECKS PASSED |
 | 27 | ALL CHECKS PASSED |
 
@@ -114,11 +142,15 @@ Every run saves its full configuration, plus the environment and split fingerpri
 | `m1_random_rescale` | `M1_random_rescale.ipynb` | No | Random-rescale attempt (M1 only) |
 | `m1_resize_vqdm` | `M1_resize_vqdm_executed.ipynb` | No | Control: VQDM replaces BigGAN, old resize |
 | `m1_native_crop_equal_jpeg` | `M1_native_crop_equal_jpeg_executed.ipynb` | No | Native crop + equal JPEG, 200 per class |
-| **`m1_final_n500`** | `M1_final_n500_executed.ipynb` | **Yes, as evidence** | **Final M1**, 500 per class |
+| **`m1_final_n500`** | `M1_final_n500_executed.ipynb` | **Yes, as evidence** | **Final M1, fold 1** (unseen SD v1.4), 500 per class |
+| **`m1_final_n500_unseen_adm`** | `M1_fold2_unseen_adm_executed.ipynb` | **Yes, as evidence** | **Final M1, fold 2** (unseen ADM) |
+| **`m1_final_n500_unseen_vqdm`** | `M1_fold3_unseen_vqdm_executed.ipynb` | **Yes, as evidence** | **Final M1, fold 3** (unseen VQDM) |
 
 Two final-run notebooks are in git:
 - **`notebooks/M1_final_n500_executed.ipynb`** is the evidence: the actual run with all outputs (metrics, plots, Grad-CAM, final verification). Read it; don't rerun it.
 - **`notebooks/M1_final_n500.ipynb`** is the one to run. It has the same code with outputs cleared and `LABELS_CONFIRMED = False`, so the label check is not skipped.
+
+For folds 2 and 3, `notebooks/M1_folds_n500.ipynb` is the one to run (outputs cleared). The two `M1_fold*_executed.ipynb` files are the evidence.
 
 The four earlier runs are summarised in [`docs/M1_ANALYSIS.md`](docs/M1_ANALYSIS.md), and their result files are on Drive.
 - Each run writes to its own folders. Earlier runs are recorded in a snapshot and checked as unchanged at the end.
@@ -142,6 +174,8 @@ MyDrive/VeriStamp/
 ├── data/manifests/m1_final_n500/          dropped_too_small.csv, cross_archive_duplicates.csv, ...
 ├── cache/<split name>/                     {train,val,test_seen,test_unseen}_native256.npy (preprocessed crops)
 ├── vslib_m1_final/                         the Python modules the notebook wrote (vs_*.py)
+├── vslib_m1_folds/                         the same modules, written by the fold 2/3 notebook
+├── features/m1_final_n500{,_unseen_adm,_unseen_vqdm}_hp_fft/   M1 2048-d features, one folder per fold
 └── experiments/
     ├── experiments_log.csv                 one row per trained model, all runs
     └── m1_final_n500/
@@ -164,6 +198,12 @@ MyDrive/VeriStamp/
                                             examples_correct_unseen.png, examples_incorrect_unseen.png
 ```
 
+Folds 2 and 3 use the same layout:
+- run folders `experiments/m1_final_n500_unseen_adm/` and `experiments/m1_final_n500_unseen_vqdm/`;
+- splits `data/splits/genimage_seen-VQDM-stable_diffusion_v_1_4_unseen-ADM_min224_n500_seed42__m1_final_n500_unseen_adm/` and `data/splits/genimage_seen-ADM-stable_diffusion_v_1_4_unseen-VQDM_min224_n500_seed42__m1_final_n500_unseen_vqdm/`;
+- caches under `cache/<split name>/`;
+- each fold's `comparison/cross_fold_summary.csv` holds the cross-fold table.
+
 Not in git:
 - Checkpoints and data are git-ignored and live only on the team Drive.
 - The repository's `models/m1_resnet.py` is still a stub. The working M1 code is the `vs_*.py` library the notebook writes (copied to `VeriStamp/vslib_m1_final/`). Moving it into the repository is still to do.
@@ -181,12 +221,14 @@ Not in git:
 
 ## Handover for M2 and Fusion
 
-The aim is that M2 and Fusion are compared with M1 on **exactly the same images, labels and preprocessing**.
+The aim is that M2 and Fusion are compared with M1 on **exactly the same images, labels and preprocessing**, **in each of the three folds**.
+- Every item below exists once per fold: replace `m1_final_n500` with `m1_final_n500_unseen_adm` or `m1_final_n500_unseen_vqdm`, and use that fold's split folder.
+- Never mix folds. For example, fold 2 Fusion uses only fold 2 M1 features and fold 2 M2 outputs.
 
 | Item | Where | How to reuse it |
 |---|---|---|
 | **Manifest** | `data/splits/<final split>/manifest.csv` | One row per image: `image_id`, `image_path`, `label`, `generator`, `file_hash` (SHA-1), `width`, `height`, `file_format`, `split`, plus status columns. Do not rebuild it |
-| **Fixed split** | `train.csv`, `val.csv`, `test_seen.csv`, `test_unseen.csv`, `split_info.json` | Use these files as they are. `split_info.json` holds fingerprints; check them before training. Stable Diffusion v1.4 must never appear in training or validation |
+| **Fixed split** | `train.csv`, `val.csv`, `test_seen.csv`, `test_unseen.csv`, `split_info.json` | Use these files as they are. `split_info.json` holds fingerprints; check them before training. The fold's unseen generator (SD v1.4, ADM or VQDM) must never appear in training or validation |
 | **Labels** | `label` column | **Real = 0, AI = 1**. Detectors output P(AI) |
 | **Preprocessing** | `vs_native.py` in `vslib_m1_final/`; caches in `cache/<final split>/*_native256.npy` | Same frozen pipeline: native size, JPEG 75–95 (4:2:0, seeded by image ID), central 256 tile aligned to 8. Training: random 224 crop + flip; evaluation: centre 224 crop. Images are 0..1 float tensors; each model normalises internally (CLIP needs its own normalisation and input size inside M2) |
 | **M1 checkpoint** | `experiments/m1_final_n500/hp_fft/best.pt` (RGB: `rgb/best.pt`) | A dict with `model` (state dict), `epoch`, `val_metrics`, …. Load with `vs_models.build_detector("hp_fft", CONFIG)` + `load_state_dict(ck["model"])`, as the notebook's `load_best()` does. The reload reproduces the validation AUROC exactly (0.9518) |
@@ -197,27 +239,32 @@ The aim is that M2 and Fusion are compared with M1 on **exactly the same images,
 
 **Rules to keep the comparison fair:**
 - Any decision threshold (for example for Real / Uncertain / AI) must be chosen on **validation** data only.
-- `test_unseen` must not be used for tuning. The Stable Diffusion test set has already been used once for the final preprocessing choice; future decisions should be based on validation data.
+- `test_unseen` must not be used for tuning, in any fold. The Stable Diffusion test set has already been used once for the final preprocessing choice; future decisions should be based on validation data.
 - Report M2 and Fusion with the same paired bootstrap against M1 on the same images.
 
 ### The saved 2048-d features
-`notebooks/M1_extract_features.ipynb` loaded `hp_fft/best.pt` (no training) and saved one 2,048-number vector per image. The vector is the pooled ResNet-50 output, i.e. the input of M1's final layer.
+`notebooks/M1_extract_features.ipynb` loaded each fold's `hp_fft/best.pt` (no training) and saved one 2,048-number vector per image. The vector is the pooled ResNet-50 output, i.e. the input of M1's final layer. Shapes in every fold: train (1400, 2048), val (300, 2048), test_seen (300, 2048), test_unseen (1000, 2048).
 
-| Split | Shape | AUROC from these features | AUROC in saved predictions |
-|---|---|---|---|
-| train | (1400, 2048) | 0.9999 | (not saved during training) |
-| val | (300, 2048) | 0.9511 | 0.9518 |
-| test_seen | (300, 2048) | 0.9374 | 0.9371 |
-| test_unseen | (1000, 2048) | 0.7123 | 0.7117 |
+AUROC from the saved features vs AUROC in the run's saved predictions:
+
+| Fold | Folder under `features/` | train | val | test_seen | test_unseen |
+|---|---|---|---|---|---|
+| 1 | `m1_final_n500_hp_fft` | 0.9999 | 0.9511 vs 0.9518 | 0.9374 vs 0.9371 | 0.7123 vs 0.7117 |
+| 2 | `m1_final_n500_unseen_adm_hp_fft` | 0.9999 | 0.9290 vs 0.9296 | 0.9191 vs 0.9188 | 0.8655 vs 0.8656 |
+| 3 | `m1_final_n500_unseen_vqdm_hp_fft` | 1.0000 | 0.9180 vs 0.9174 | 0.9350 vs 0.9341 | 0.8899 vs 0.8895 |
+
+(Train predictions were not saved during training, so there is nothing to compare the train features against.)
 
 - **All splits use the evaluation crop:** the centre 224 crop of the valid region, offset a multiple of 8. No augmentation, train included. Computed in float32; the training run scored in bfloat16, hence the small AUROC differences.
 - **Checks passed:**
   - cache fingerprints match the split CSVs;
-  - logit correlation with the saved predictions ≥ 0.9997, and Real/AI prediction agreement ≥ 99.3%;
+  - logit correlation with the saved predictions ≥ 0.9995 in every fold, and Real/AI prediction agreement ≥ 98.3%;
   - same image order, no NaN, and the reloaded files match what was computed.
-- **Provenance:** `features_info.json` records the checkpoint SHA-256 (`5b4d9baa…167cd`), split fingerprints and preprocessing. `feature_checks.csv` holds the comparison table.
+- **Provenance:** `features_info.json` records the checkpoint SHA-256 (fold 1 `5b4d9baa…167cd`, fold 2 `cc5d7072…8615e`, fold 3 `f92389d9…317a4`), split fingerprints and preprocessing. `feature_checks.csv` holds the comparison table.
+- **Known mislabel:** the `README.md` written inside the fold 2 and 3 feature folders says "test_unseen (Stable Diffusion v1.4)". In those folds `test_unseen` is ADM and VQDM respectively. `features_info.json` (`split_name`) is correct.
+- **Library folder:** the fold 2/3 extractions loaded the code from `vslib_m1_final`. It's the same code as `vslib_m1_folds`, and the scores reproduced the saved predictions.
 - **Caution for Fusion:**
-  - M1 almost perfectly separates its own training images (AUROC 0.9999), so train-split features are far more confident than on new images.
+  - M1 almost perfectly separates its own training images (train AUROC 0.9999–1.0000 in every fold), so train-split features are far more confident than on new images.
   - A Fusion model trained on them may learn to over-trust M1.
   - Consider fitting Fusion on validation features (with cross-validation), or at least checking for this on val.
 
@@ -228,10 +275,11 @@ The aim is that M2 and Fusion are compared with M1 on **exactly the same images,
 Every number in this file and in `docs/M1_ANALYSIS.md` comes from the printed outputs of:
 - `notebooks/M1_run001_executed.ipynb`
 - `notebooks/M1_random_rescale.ipynb`
-- `notebooks/M1_extract_features.ipynb` (2048-d features; executed copy, committed)
+- `notebooks/M1_extract_features.ipynb`, `M1_extract_features_unseen_adm.ipynb` and `M1_extract_features_unseen_vqdm.ipynb` (2048-d features, folds 1–3)
+- `notebooks/M1_fold2_unseen_adm_executed.ipynb` and `M1_fold3_unseen_vqdm_executed.ipynb` (folds 2 and 3: Sections 7, 14, 19, 22, 23/23b, 24, 25, 27)
 - `notebooks/M1_resize_vqdm_executed.ipynb`
 - `notebooks/M1_native_crop_equal_jpeg_executed.ipynb`
-- `notebooks/M1_final_n500_executed.ipynb` (committed to git, like `M1_extract_features.ipynb`; the other four are not), especially:
+- `notebooks/M1_final_n500_executed.ipynb` (committed to git, like the fold 2/3 and feature notebooks; the four earlier runs are not), especially:
   - Section 19 (metrics);
   - Section 23 (paired comparisons across all runs);
   - Section 24 (JPEG degradation);
