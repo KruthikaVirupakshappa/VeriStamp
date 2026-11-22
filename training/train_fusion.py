@@ -18,6 +18,7 @@ from torch.utils.data import DataLoader, TensorDataset
 from common.config import load_config
 from common.seed import get_device, set_seed
 from models.fusion import FusionDetector
+from models.thresholds import fit_thresholds, save_thresholds, to_verdict
 
 SPLITS = ("train", "val", "test_seen", "test_unseen")
 
@@ -54,16 +55,33 @@ def evaluate(model, data, device):
             "labels": labels, "p_ai": p_ai}
 
 
-def late_fusion_metrics(data):
+def late_fusion_result(data):
     p_ai = (data["m1_p_ai"] + data["m2_p_ai"]) / 2.0
     labels = data["labels"].numpy().astype(int)
-    return {"n": int(len(labels)), "auroc": float(roc_auc_score(labels, p_ai)),
+    return {"labels": labels, "p_ai": p_ai,
+            "n": int(len(labels)), "auroc": float(roc_auc_score(labels, p_ai)),
             "accuracy": float(accuracy_score(labels, p_ai >= 0.5))}
 
 
-def write_predictions(path: Path, data, result):
+def three_way_metrics(result, thresholds):
+    verdicts = np.asarray([to_verdict(float(score), thresholds["t_low"], thresholds["t_high"])
+                           for score in result["p_ai"]])
+    labels = result["labels"]
+    decided = verdicts != "Uncertain"
+    expected = np.where(labels == 1, "AI", "Real")
+    return {"n": int(len(labels)), "decided": int(decided.sum()),
+            "coverage": float(decided.mean()),
+            "accuracy_on_decided": float((verdicts[decided] == expected[decided]).mean())
+            if decided.any() else 0.0,
+            "uncertain": int((~decided).sum())}
+
+
+def write_predictions(path: Path, data, result, thresholds=None):
     pd.DataFrame({"image_id": data["ids"], "label": data["labels"].numpy().astype(int),
-                  "p_ai": result["p_ai"]}).to_csv(path, index=False)
+                  "p_ai": result["p_ai"],
+                  "verdict": [to_verdict(float(score), thresholds["t_low"], thresholds["t_high"])
+                              for score in result["p_ai"]] if thresholds else None}).to_csv(
+                                  path, index=False)
 
 
 def main():
@@ -118,15 +136,33 @@ def main():
     torch.save({"model": model.state_dict(), "config": cfg, "m1_dim": m1_dim, "m2_dim": m2_dim},
                run_dir / "best.pt")
     early = {split: evaluate(model, data[split], device) for split in SPLITS}
+    late = {split: late_fusion_result(data[split]) for split in SPLITS}
+    early_thresholds = fit_thresholds(early["val"]["p_ai"], early["val"]["labels"])
+    late_thresholds = fit_thresholds(late["val"]["p_ai"], late["val"]["labels"])
+    save_thresholds(run_dir / "early_thresholds.json", early_thresholds["t_low"],
+                    early_thresholds["t_high"],
+                    rule="validation-only; AI-called-Real <= 2%; Uncertain <= 20%")
+    save_thresholds(run_dir / "late_thresholds.json", late_thresholds["t_low"],
+                    late_thresholds["t_high"],
+                    rule="validation-only; AI-called-Real <= 2%; Uncertain <= 20%")
     metrics = {"best_epoch": best_epoch, "best_val_auroc": best_auc,
                "feature_dims": {"m1": m1_dim, "m2": m2_dim, "fused": m1_dim + m2_dim},
                "early_fusion": {s: {k: v for k, v in r.items() if k not in ("labels", "p_ai")}
                                 for s, r in early.items()},
-               "late_fusion_average": {s: late_fusion_metrics(data[s]) for s in SPLITS},
+               "early_thresholds": early_thresholds,
+               "early_three_way": {s: three_way_metrics(early[s], early_thresholds) for s in SPLITS},
+               "late_fusion_average": {s: {k: v for k, v in r.items()
+                                            if k not in ("labels", "p_ai")}
+                                        for s, r in late.items()},
+               "late_thresholds": late_thresholds,
+               "late_three_way": {s: three_way_metrics(late[s], late_thresholds) for s in SPLITS},
                "standardization_fit_split": "train"}
     (run_dir / "metrics.json").write_text(json.dumps(metrics, indent=2))
     for split in SPLITS:
-        write_predictions(run_dir / f"predictions_{split}.csv", data[split], early[split])
+        write_predictions(run_dir / f"predictions_{split}.csv", data[split], early[split],
+                          early_thresholds)
+        write_predictions(run_dir / f"predictions_{split}_late.csv", data[split], late[split],
+                          late_thresholds)
     print(json.dumps(metrics, indent=2))
 
 
