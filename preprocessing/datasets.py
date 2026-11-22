@@ -103,5 +103,6 @@ class NativeCacheDataset(Dataset):
         if x01.max() > 1:
             x01 = x01 / 255.0
         meta = {"image_id": row["image_id"], "generator": row["generator"],
-                "split": row.get("split", ""), "cache_index": i}
+                "split": row.get("split", ""), "cache_index": i,
+                "image_path": row.get("image_path", row.get("path", ""))}
         return x01, torch.tensor(int(row["label"])), meta

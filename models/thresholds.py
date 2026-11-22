@@ -33,11 +33,37 @@ def load_thresholds(path: str | Path) -> tuple[float, float]:
 
 
 def fit_thresholds(p_ai, labels, max_ai_as_real: float = 0.02, max_uncertain: float = 0.20):
-    """TODO (Workstreams B + D): choose t_low / t_high on validation predictions.
+    """Fit validation-only Real/Uncertain/AI thresholds."""
+    import numpy as np
 
-    Suggested rule (a team decision, see docs/decisions.md): among threshold pairs
-    where the share of AI images called Real is <= max_ai_as_real and the share of
-    Uncertain verdicts is <= max_uncertain, pick the pair with the best accuracy
-    on decided images. Report the coverage you get.
-    """
-    raise NotImplementedError("Implement after the team agrees on the threshold rule.")
+    scores = np.asarray(p_ai, dtype=float)
+    y = np.asarray(labels, dtype=int)
+    if scores.ndim != 1 or y.ndim != 1 or len(scores) != len(y) or len(scores) == 0:
+        raise ValueError("p_ai and labels must be non-empty arrays of equal length")
+    candidates = np.unique(np.concatenate([np.linspace(0.0, 1.0, 201), scores]))
+    best = None
+    for low in candidates:
+        for high in candidates[candidates >= low]:
+            verdict = np.full(len(scores), UNCERTAIN, dtype=object)
+            verdict[scores < low] = REAL
+            verdict[scores > high] = AI
+            uncertain = verdict == UNCERTAIN
+            decided = ~uncertain
+            ai_as_real = float(((y == 1) & (verdict == REAL)).sum() / max(1, (y == 1).sum()))
+            uncertain_rate = float(uncertain.mean())
+            if ai_as_real > max_ai_as_real or uncertain_rate > max_uncertain or not decided.any():
+                continue
+            expected = np.where(y == 1, AI, REAL)
+            accuracy = float((verdict[decided] == expected[decided]).mean())
+            coverage = float(decided.mean())
+            objective = (accuracy, coverage, -float(high - low), float(low), -float(high))
+            if best is None or objective > best[0]:
+                best = (objective, float(low), float(high), accuracy, coverage,
+                        ai_as_real, uncertain_rate)
+    if best is None:
+        raise ValueError("No threshold pair satisfies the validation constraints")
+    _, low, high, accuracy, coverage, ai_as_real, uncertain_rate = best
+    return {"t_low": low, "t_high": high, "decided_accuracy": accuracy,
+            "coverage": coverage, "ai_called_real_rate": ai_as_real,
+            "uncertain_rate": uncertain_rate,
+            "max_ai_as_real": float(max_ai_as_real), "max_uncertain": float(max_uncertain)}
