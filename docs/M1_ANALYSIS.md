@@ -4,21 +4,22 @@
 Companion file: [`README_M1.md`](../README_M1.md) covers how to reproduce M1 and what to reuse for M2 and Fusion.
 
 > **How to read this document**
-> - Every number here comes from the printed outputs of the five executed M1 notebooks (listed in [Evidence](#evidence)). Those outputs are generated from the saved `metrics.json`, `predictions_*.csv` and comparison files of each run.
+> - Every number here comes from the printed outputs of the executed M1 notebooks (listed in [Evidence](#evidence)). Those outputs are generated from the saved `metrics.json`, `predictions_*.csv` and comparison files of each run.
 > - **Subset level.** Four runs used the **debug** subset (200 images per class per generator). The final run used the **interim** subset (500 per class). The proposal's final target of 3,000–5,000 per class was **not** run.
-> - Every result is **one seed (42)** and **one leave-one-generator-out fold** (Stable Diffusion v1.4 held out). Read them as interim evidence, not as final benchmark numbers.
+> - Every result is **one seed (42)**. The design experiments (runs 1–5) use **one leave-one-generator-out fold** (Stable Diffusion v1.4 held out). The final setup was then repeated for the **other two folds** (ADM held out, VQDM held out), completing the proposal's 3-fold evaluation ([Section 7.7](#77-three-fold-evaluation)). Read everything as interim evidence, not as final benchmark numbers.
 
 ---
 
 ## Short answer
 
-| Question | Answer (final run `m1_final_n500`) |
+| Question | Answer (final run `m1_final_n500`, fold 1, unless stated) |
 |---|---|
+| **Across all 3 folds?** | **M1 ≥ RGB on the unseen generator in every fold.** Mean AUROC 0.822 vs 0.794 (+0.028). Clearly higher for SD v1.4 (+0.031 [0.001, 0.059]) and ADM (+0.050 [0.028, 0.072]); no detectable difference for VQDM (+0.004 [−0.016, 0.023]) |
 | Final recommended model | M1 checkpoint `experiments/m1_final_n500/hp_fft/best.pt` |
 | Does M1 beat the RGB baseline on unseen Stable Diffusion? | **Yes, by a small margin.** AUROC 0.712 vs 0.681. Paired difference +0.031, 95% interval [0.001, 0.059] |
 | On the seen generators (ADM, VQDM)? | No detectable difference. AUROC 0.937 vs 0.947, difference −0.010 [−0.033, 0.013] |
 | Is the unseen result good in absolute terms? | **No.** At threshold 0.5, M1 detects only 33.8% of Stable Diffusion images (recall 0.338) |
-| After JPEG compression? | Both models lose AUROC. At quality 30, M1's advantage is gone (+0.007 [−0.025, 0.038]) |
+| After JPEG compression? | Both models lose AUROC. At quality 30, M1's advantage is gone in every fold (+0.007, 0.000, +0.012; all intervals include 0) |
 | Did native cropping improve unseen results? | Not significantly by itself (200-per-class runs). It strongly improved the seen results and removed the resizing shortcut, which made the RGB vs M1 comparison fair |
 
 ---
@@ -148,7 +149,7 @@ The 70/15/15 split is done separately for each generator and class, so every spl
 **Why Stable Diffusion was the unseen generator.**
 - It is the most different from the training generators: a text-to-image latent diffusion model at 512×512, while ADM, BigGAN and VQDM are ImageNet class-conditional models at 128–256 px. Generalising to it is the hard, realistic case.
 - It was also used as the unseen generator in `m1_run_001`, and keeping it fixed allowed later runs to be compared on the same test images.
-- Only one fold was run. The proposal's other folds (holding out each generator in turn) were not run.
+- The design experiments used only this fold. Afterwards the frozen final setup was repeated with **ADM** and with **VQDM** as the unseen generator (`m1_final_n500_unseen_adm`, `m1_final_n500_unseen_vqdm`). Those folds train on the other two generators, so Stable Diffusion is a *seen* generator there. Results are in [Section 7.7](#77-three-fold-evaluation).
 
 ### Exact split sizes
 
@@ -349,7 +350,7 @@ Evaluation transforms are deterministic, so the same image always gets the same 
 
 ## 6. Experiments performed
 
-Five experiments in order. Each was a separate run folder; earlier runs were never modified.
+Five design experiments in order, then two more folds of the final setup. Each was a separate run folder; earlier runs were never modified.
 
 | # | Run | Date (from notebook) | Subset | Seen | Preprocessing | Models |
 |---|---|---|---|---|---|---|
@@ -358,6 +359,8 @@ Five experiments in order. Each was a separate run folder; earlier runs were nev
 | 3 | `m1_resize_vqdm` | 2026-10-27 | debug (200) | ADM, VQDM | Resize 256 (control) | RGB + M1 |
 | 4 | `m1_native_crop_equal_jpeg` | 2026-11-14 | debug (200) | ADM, VQDM | Native crop + equal JPEG | RGB + M1 |
 | 5 | `m1_final_n500` | 2026-11-14 | **interim (500)** | ADM, VQDM | Native crop + equal JPEG (frozen) | RGB + M1, plus JPEG degradation and Grad-CAM |
+| 6 | `m1_final_n500_unseen_adm` | 2026-11-22 | interim (500) | VQDM, SD v1.4 (unseen ADM) | Same as run 5 | Same as run 5 |
+| 7 | `m1_final_n500_unseen_vqdm` | 2026-11-22 | interim (500) | ADM, SD v1.4 (unseen VQDM) | Same as run 5 | Same as run 5 |
 
 ### 6.1 `m1_run_001`: original baseline
 - **Purpose:** first end-to-end M1 vs RGB comparison, following the proposal.
@@ -417,6 +420,17 @@ Five experiments in order. Each was a separate run folder; earlier runs were nev
   - M1's seen-generator deficit from the 200-per-class run disappeared.
   - M1 keeps a smaller but still significant advantage on unseen SD.
   - Details in [Section 7](#7-results).
+
+### 6.6 Folds 2 and 3: the final setup with ADM or VQDM held out
+- **Purpose:** complete the proposal's 3-fold leave-one-generator-out evaluation. The question is whether M1's advantage holds for other unseen generators, not only Stable Diffusion.
+- **Settings:**
+  - identical to run 5: same image pool, 500 per class, seed 42, frozen preprocessing and training settings;
+  - only the unseen generator changes;
+  - run with `notebooks/M1_folds_n500.ipynb`. It skips Section 0, reads the fold 1 dataset without writing to it, and checks that the split settings equal fold 1's.
+- **Result:**
+  - fold 2 (unseen ADM): M1 0.866 vs RGB 0.816 (+0.050 [0.028, 0.072]);
+  - fold 3 (unseen VQDM): M1 0.889 vs RGB 0.886 (+0.004 [−0.016, 0.023]).
+- **Meaning:** M1's advantage on unseen generators appears in 2 of 3 folds and never reverses. Details in [Section 7.7](#77-three-fold-evaluation).
 
 ---
 
@@ -616,6 +630,71 @@ A smaller gap is not automatically better: `m1_resize_vqdm` has small gaps partl
 
 ---
 
+### 7.7 Three-fold evaluation
+Each fold has 1,000 unseen test images (500 Real + 500 AI) and 300 test_seen images. The AUROC differences are paired on the same images (bootstrap, 95% interval).
+
+**Unseen generator (the RQ1 result)**
+
+| Fold | Unseen | RGB AUROC | M1 AUROC | M1 − RGB [95% CI] | RGB recall | M1 recall | RGB Real acc. | M1 Real acc. |
+|---|---|---|---|---|---|---|---|---|
+| 1 | SD v1.4 | 0.681 | 0.712 | +0.031 [0.001, 0.059] | 0.296 | 0.338 | 0.904 | 0.906 |
+| 2 | ADM | 0.816 | 0.866 | +0.050 [0.028, 0.072] | 0.476 | 0.766 | 0.892 | 0.822 |
+| 3 | VQDM | 0.886 | 0.889 | +0.004 [−0.016, 0.023] | 0.720 | 0.790 | 0.864 | 0.810 |
+| **Mean** | | **0.794** | **0.822** | **+0.028** | | | | |
+
+(Recall = AI images caught at threshold 0.5; Real acc. = Real photos correctly called Real.)
+
+**Seen generators and validation (M1 − RGB, AUROC)**
+
+| Fold | val | test_seen |
+|---|---|---|
+| 1 | −0.024 [−0.046, −0.005] | −0.010 [−0.033, 0.013] |
+| 2 | −0.037 [−0.064, −0.014] | −0.009 [−0.041, 0.022] |
+| 3 | −0.018 [−0.044, 0.008] | −0.009 [−0.036, 0.014] |
+
+**JPEG degradation, unseen test set (M1 − RGB, AUROC)**
+
+| Fold | clean | JPEG 65 | JPEG 30 |
+|---|---|---|---|
+| 1 | +0.031 [0.001, 0.059] | +0.029 [−0.001, 0.058] | +0.007 [−0.025, 0.038] |
+| 2 | +0.050 [0.028, 0.072] | +0.042 [0.020, 0.066] | 0.000 [−0.028, 0.028] |
+| 3 | +0.004 [−0.016, 0.023] | −0.010 [−0.031, 0.009] | +0.012 [−0.012, 0.036] |
+
+In fold 2, compression at quality 30 cost M1 more AUROC than RGB on the unseen set (−0.120 vs −0.070).
+
+**Grad-CAM centre share (0.25 = spread evenly)**
+- In all three folds, M1's heat maps are more concentrated in the centre of the crop than RGB's.
+- The largest gap is for "unseen Real called AI": M1 0.65 / 0.68 vs RGB 0.38 / 0.40 in folds 2 / 3.
+- This is an observation only. The cause was not tested.
+
+**What it means**
+- **Generalisation:** M1 was at least as good as RGB on the unseen generator in every fold, and clearly better in 2 of 3. This supports RQ1 more strongly than fold 1 alone, but the effect depends on the generator.
+- **Fold difficulty differs:**
+  - Stable Diffusion is the hardest held-out generator (AUROC about 0.7), and VQDM the easiest (about 0.89).
+  - ADM and VQDM are both 256 px ImageNet class-conditional models, so holding out one while training on the other is an easier transfer.
+  - The 3-fold mean therefore mixes very different tasks. Report the per-fold rows first.
+- **Seen generators:** no M1 advantage in any fold. On validation, M1 is slightly lower in every fold, and significantly so in folds 1 and 2. M1's benefit is specific to unseen generators.
+- **Threshold trade-off in fold 2:** at 0.5, M1 caught far more unseen ADM images than RGB (recall 0.766 vs 0.476), but it called more Real photos AI (Real accuracy 0.822 vs 0.892).
+- **Compression:** M1's advantage relies on fine high-frequency traces. Heavy JPEG (quality 30) removes it in every fold.
+
+**Checks (folds 2 and 3)**
+- Every leakage check PASS. 0 shared hashes, no near-duplicates across splits, and the unseen generator has 0 rows in train and val.
+- Split settings identical to fold 1. All sanity checks passed; the shuffled-label run stayed at AUROC 0.500.
+- 14,482 protected files (fold 1, the earlier runs, the dataset) unchanged. Final verification: ALL CHECKS PASSED in both.
+
+**Shortcut diagnostics (folds 2 and 3)**
+- **17c, Real photos' original JPEG quality vs P(AI):**
+  - fold 3: Spearman ρ −0.15 (RGB, p = 0.011) and −0.18 (M1, p = 0.002). Lower-quality originals got higher P(AI).
+  - fold 2: about −0.05 (not significant).
+  - fold 1 showed the same direction (ρ −0.27 / −0.29).
+  - The notebook printed "no clear dependence" for fold 3, which understates it. A weak residual format cue may remain.
+- **17b, Real photos with a shorter side under 256 px:** M1 gave them high P(AI): 0.65 (fold 2, n = 6) and 0.71 (fold 3, n = 5). RGB gave 0.41 and 0.36.
+  - The samples are far too small to conclude anything.
+  - The signal is consistent with the crop-coverage limitation ([Section 9](#known-limitation-crop-coverage-differs-by-source)).
+- **Best epoch:** in fold 3 both models' best epoch was 10, the maximum allowed. That's the same 10-epoch cap as in fold 1, left unchanged so all folds stay comparable.
+
+---
+
 ## 8. Sanity and reliability checks
 
 ### Pre-training sanity checks (all runs)
@@ -735,8 +814,18 @@ The model could partly learn "whole scene = AI", which would not transfer to SD.
 
 The preprocessing was frozen before this run. The test sets were only reported, never used for tuning.
 
-### Does M1 beat RGB on unseen Stable Diffusion?
-**Yes, slightly, in this one fold and seed.**
+### Does M1 beat RGB on unseen generators? (all 3 folds)
+**Yes in 2 of 3 folds, and never worse.**
+- Mean unseen AUROC: M1 0.822 vs RGB 0.794 (+0.028).
+- Per fold:
+  - SD v1.4 +0.031 [0.001, 0.059];
+  - ADM +0.050 [0.028, 0.072];
+  - VQDM +0.004 [−0.016, 0.023].
+- No advantage on seen generators in any fold. In every fold, heavy JPEG (quality 30) removes the advantage.
+- One seed and 500 per class. See [Section 7.7](#77-three-fold-evaluation).
+
+### Does M1 beat RGB on unseen Stable Diffusion? (fold 1)
+**Yes, slightly, in this fold and seed.**
 - AUROC 0.712 vs 0.681. Paired difference +0.031 with 95% interval [0.001, 0.059]. The lower end is very close to 0, so the advantage is small and fragile.
 - It was also positive in the 200-per-class native run (+0.073 [0.024, 0.122]).
 - It was **not** present under the resize preprocessing (control: −0.010 [−0.063, 0.045]).
@@ -758,8 +847,7 @@ The preprocessing was frozen before this run. The test sets were only reported, 
 - **Most SD images are missed** at threshold 0.5 (recall 0.338). The default threshold was not tuned. A threshold chosen on *validation* data could trade false positives for recall, but this was not done. Any threshold must come from validation, never from test.
 - **Not robust to compression:** the advantage disappears at JPEG 30.
 - **Limited scope:**
-  - one fold;
-  - one seed;
+  - one seed (all 3 folds were run, each once);
   - 500 per class (proposal: 3,000–5,000);
   - no published baselines;
   - the crop-coverage confound is untested.
@@ -768,7 +856,7 @@ The preprocessing was frozen before this run. The test sets were only reported, 
 
 ## Evidence
 
-Numbers were taken from the outputs of these executed notebooks in `VeriStamp/notebooks/`. Only `M1_final_n500_executed.ipynb` is committed to git; the other four are kept locally and their result files are on Drive:
+Numbers were taken from the outputs of these executed notebooks in `VeriStamp/notebooks/`. The final-run, fold 2/3 and feature notebooks are committed to git. The four earlier runs are kept locally, and their result files are on Drive:
 
 | File | Run(s) | Key sections used |
 |---|---|---|
@@ -777,6 +865,9 @@ Numbers were taken from the outputs of these executed notebooks in `VeriStamp/no
 | `M1_resize_vqdm_executed.ipynb` | `m1_resize_vqdm` | 0.2b (replacement generator), 6b (too small), 7–7b, 8c (JPEG audit, crop coverage), 14–22, 23 (comparison), 24 (final verification) |
 | `M1_native_crop_equal_jpeg_executed.ipynb` | `m1_native_crop_equal_jpeg` | same as above, plus 8b (native checks), 17c, 23 (paired comparisons) |
 | `M1_final_n500_executed.ipynb` | `m1_final_n500` | 0–27, including 23 (all-run comparison), 24 (JPEG degradation), 25 (Grad-CAM), 26 (`M1_FINAL_SUMMARY.md`), 27 (final verification) |
+| `M1_fold2_unseen_adm_executed.ipynb` | `m1_final_n500_unseen_adm` | 7–7b (split and fold checks), 14 (sanity), 15–22, 17b/17c, 23–23b (RGB vs M1, cross-fold table), 24, 25, 27 |
+| `M1_fold3_unseen_vqdm_executed.ipynb` | `m1_final_n500_unseen_vqdm` | same as fold 2; its 23b holds the full 3-fold table |
+| `M1_extract_features*.ipynb` (3 files) | features for folds 1–3 | Sections 5–6 (feature checks) |
 
 These outputs print the contents of the files saved on Google Drive under `VeriStamp/experiments/<run>/`:
 - `metrics.json`, `predictions_*.csv`, `results_summary.csv`;
