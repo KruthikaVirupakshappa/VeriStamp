@@ -1,0 +1,21 @@
+_base_: base.yaml
+data:
+  generators: [ADM, VQDM, stable_diffusion_v_1_4]
+  per_class: 500
+model:
+  name: m2_clip
+  clip_name: openai/clip-vit-base-patch16
+  frozen: true
+  head: {hidden: 256, dropout: 0.3}
+preprocess:
+  mode: native_cache
+  crop_size: 224
+  align: 8
+train:
+  batch_size: 64
+  lr: 1.0e-3
+  weight_decay: 3.0e-4
+  epochs: 30
+  patience: 5
+  augmentation:
+    enabled: false
