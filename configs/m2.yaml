@@ -1,11 +1,21 @@
 _base_: base.yaml
+data:
+  generators: [ADM, VQDM, stable_diffusion_v_1_4]
+  per_class: 500
+  # Split/cache locations are supplied explicitly on the training command.
 model:
   name: m2_clip
-  clip_name: openai/clip-vit-base-patch16     # proposal main: openai/clip-vit-large-patch14
+  # M4 Pro-friendly first run. Switch to openai/clip-vit-large-patch14 for the proposal main result.
+  clip_name: openai/clip-vit-base-patch16
   frozen: true
   head: {hidden: 256, dropout: 0.2}
+preprocess:
+  mode: native_cache
+  crop_size: 224
+  align: 8
 train:
-  batch_size: 256
+  batch_size: 64
   lr: 1.0e-3
   weight_decay: 1.0e-4
   epochs: 30
+  patience: 5
