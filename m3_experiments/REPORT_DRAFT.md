@@ -1,10 +1,11 @@
 # Report sections: RQ2 edits, image quality, RQ3 and the pipeline
 
 Text for the report sections the handover guide assigns to M3 (tasks 8 and 11), filled in from the
-Kaggle run of 20 November 2026 (Tesla T4; `results/`, notebooks in `executed/`). Every number below is
-in `results/report_tables.md` or the per-photo CSVs next to it. Two places still depend on the team:
-M2 and the fusion model (RQ3 was run on M1 only), and the Uncertain thresholds (placeholders 0.35 and
-0.65; they affect only the verdict counts in RQ3 and the pipeline, not the score changes).
+Kaggle runs of 20 November 2026 (RQ2, image quality, GenImage check) and 22 November 2026 (RQ3 and the
+pipeline with M1, M2 and Late Fusion), on a Tesla T4. Every number below is in `results/report_tables.md`
+or the per-photo CSVs next to it; the run notebooks are in `executed/`. One input is still a
+placeholder: M1's Uncertain thresholds (0.35 and 0.65), which only affect M1's verdict counts. M2 and
+Late Fusion use the thresholds their owners fitted on validation.
 
 ---
 
@@ -111,59 +112,74 @@ needed. No unstamped GenImage photo was read as carrying a valid stamp.
 
 ### Setup
 
-We take 300 Real and 300 AI photos from M1's GenImage test split (seeded sample of the 1,300 test
-photos: ADM and VQDM, the generators M1 was trained on, and Stable Diffusion v1.4, which it never saw).
-The photos were read from the official GenImage archives and each matches the SHA-1 recorded in M1's
-split files. Each photo is scored by M1, stamped with the verdict the pipeline would write, saved as
-PNG and scored again. Both versions go through exactly the same steps before M1: the same file format
-and M1's own preprocessing (the same JPEG re-encoding with the same per-image quality and the same
+We take 300 Real and 300 AI photos from the detectors' GenImage test split for the fold in which
+Stable Diffusion v1.4 is held out (ADM and VQDM seen, SD v1.4 unseen; seeded sample of the 1,300 test
+photos). The photos were read from the official GenImage archives, and each matches the SHA-1 recorded
+in M1's split files. Each photo is scored by M1, M2 and Late Fusion ((M1 + M2) / 2), stamped with the
+verdict the pipeline would write (Late Fusion's), saved as PNG and scored again. Both versions go
+through exactly the same steps before each detector: the same file format and each detector's own
+preprocessing (for both, a JPEG re-encoding at the same per-image quality, a centre 256 tile and a
 centre 224 crop). The stamp is computed at 128 pixels, enlarged and added to the full-size photo, so
 the photo's size and detail do not change and the only difference between the two versions is the
-stamp. Scoring the same photo twice gives identical scores. We report the mean change in P(AI) for
-Real and for AI photos with 95% bootstrap intervals, the number of verdicts that change (Real, AI or
-Uncertain), and accuracy and AUROC before and after stamping.
+stamp.
 
-M2 and the fusion model were not ready in time, so RQ3 was run on M1 only. M1 is the detector most
-exposed to the stamp: it looks at high-frequency detail, which is where the stamp's pattern lies.
+Before stamping, every detector reproduces its owner's own score for each of the 600 photos (largest
+difference 0.00001, correlation 1.0; M1 against the scores in the fusion files, M2 and Late Fusion
+against their prediction files), and its AUROC on the unseen SD v1.4 photos matches the reported
+value (M1 0.684 here against 0.712, M2 0.909 against 0.906, Late Fusion 0.874 against 0.878). RQ3
+therefore tests the team's models exactly as their owners ran them.
 
 ### Results
 
 | Detector | Score change, real photos | Score change, AI photos | Verdict flips | Accuracy before and after |
 |---|---|---|---|---|
-| M1 | +0.005 [−0.005, +0.015] | −0.008 [−0.020, +0.006] | 51 of 600 (2 Real→AI, 2 AI→Real, 47 to or from Uncertain) | 67.5% / 67.2% |
-| M2 | not run (model not ready) | | | |
-| Fusion | not run (needs M2) | | | |
+| M1 | +0.004 [−0.006, +0.014] | −0.013 [−0.025, −0.002] | 53 of 600 (0 Real→AI, 1 AI→Real, 52 to or from Uncertain) | 67.5% / 66.7% |
+| M2 | +0.063 [+0.048, +0.080] | +0.053 [+0.031, +0.075] | 118 of 600 (3 Real→AI, 1 AI→Real, 114 to or from Uncertain) | 82.5% / 83.2% |
+| Late Fusion | +0.034 [+0.024, +0.044] | +0.020 [+0.008, +0.033] | 72 of 600 (all to or from Uncertain) | 75.2% / 75.2% |
 
-On average the stamp does not move M1's scores: both mean changes are close to zero and their 95%
-intervals include zero, so the stamp does not push M1 towards "Real" or towards "AI". Accuracy
-(67.5% → 67.2%) and AUROC (0.754 → 0.748) are almost unchanged. Individual scores do move, however:
-the median change is 0.009, but one photo in ten moves by more than 0.15 and the largest change is
-0.57. The size of these changes is the same for the three generators (mean absolute change 0.048 for
-ADM, 0.049 for VQDM and 0.048 for Stable Diffusion v1.4). As a result 51 of the 600 verdicts change,
-almost all between a firm verdict and Uncertain; a Real photo became AI in 2 cases and an AI photo
-became Real in 2. At a single threshold of 0.5, 22 of 600 predictions flip.
+Score changes are mean P(AI) after minus before, with 95% bootstrap intervals; accuracy is at 0.5.
 
-The answer to RQ3, for M1, is that the stamp adds noise to individual scores but no systematic bias.
-This fits the proposal's expectation that a frequency-based detector reacts to the stamp. Whether the
-CLIP-based M2 reacts less, as the proposal expects, could not be tested and is left for future work.
+M1 is barely affected. Its changes are centred on zero (P(AI) rises for 51% of photos, median change
+0.000) and its mean change for Real photos is not different from zero; for AI photos it is a very small
+decrease (−0.013). Individual scores move by a median of 0.009, and its accuracy (67.5% → 66.7%) and
+AUROC (0.754 → 0.740) hardly change.
 
----
+M2 reacts more, and in one direction: stamping raises P(AI). It rises for 71% of photos, by 0.063 on
+average for Real photos and 0.053 for AI photos, with both intervals well above zero; one photo in ten
+moves by more than 0.30. The shift is strongest on Stable Diffusion photos (+0.069) and smaller on ADM
+(+0.028) and VQDM (+0.022). On Real photos it moves verdicts towards caution: 241 of 300 are called Real
+after stamping against 265 before, 50 Uncertain against 27, and only 9 AI against 8. On AI photos it
+helps (152 called AI against 129). Accuracy is unchanged (82.5% → 83.2%), but the ranking of photos is
+slightly worse (AUROC 0.930 → 0.916). Late Fusion averages the two and inherits about half of M2's
+shift (+0.034 for Real photos; Real verdicts on Real photos 257 → 245); no Late Fusion verdict flipped
+between Real and AI.
+
+The answer to RQ3 is that the stamp barely changes M1's predictions but moves M2's towards AI. This is
+the opposite of the proposal's expectation that the frequency-based M1 would react more than the
+CLIP-based M2. A likely reason fits the RQ2 results: the stamp is computed at 128 pixels and enlarged,
+so it is a coarse pattern rather than fine high-frequency noise. M1's high-pass filter removes most of
+such a pattern, while CLIP's image features respond to structure at that scale (the same coarseness
+lets most of the stamp's bits survive the VAE round trip).
+
+In the pipeline this does not affect the verdict a photo receives, because the detectors score the
+photo before it is stamped, and a photo with a valid stamp is not scored again. It matters when a
+stamped photo is scored afterwards, for example when an edit breaks the stamp and the detectors run
+again: M2 and Late Fusion will then lean slightly towards AI and Uncertain on real photos. Training
+M3 with the detectors in the loop, or with a weaker or finer stamp, could reduce this.
 
 ## The decode, detect and stamp pipeline
 
 The pipeline first reads the stamp. If the checksum passes, it returns the stored verdict and skips
-the detectors. Otherwise it runs the detectors (here M1 alone, as M2 and fusion were not ready), turns
-P(AI) into Real, AI or Uncertain with the thresholds (placeholders 0.35 and 0.65 until the team fits
-them on validation), and stamps that verdict into the photo with M3. A valid stamp only means that our
-detector gave that verdict when the photo was stamped: the stamp is not signed, so it is not proof
-that the photo is authentic.
+the detectors. Otherwise it runs M1 and M2, combines them with Late Fusion ((M1 + M2) / 2), turns the
+fused P(AI) into Real, AI or Uncertain with Late Fusion's validation thresholds (0.325 and 0.754), and
+stamps that verdict into the photo with M3. A valid stamp only means that our detectors gave that
+verdict when the photo was stamped: the stamp is not signed, so it is not proof that the photo is
+authentic.
 
 On 200 Real and 200 AI GenImage test photos, no unstamped photo was mistaken for a stamped one (0 false
-skips). 93 of the 200 AI photos (46.5%) were stamped as Real, the system metric from the proposal; 13
-Real photos were stamped as AI and 6.8% of photos were Uncertain. Almost all AI photos stamped as Real
-come from Stable Diffusion v1.4 (91 of 148, against 2 of 52 for ADM and VQDM), the generator M1 never
-saw in training; this is a limit of M1, not of the stamp. When a stamped output was fed back in, 93.5%
-were answered from the stamp (99.5% of those with the same verdict as the first pass), 88.5% after JPEG
-quality 90 (98.8% the same verdict), and 17.8% after a VAE round trip, where the stamp breaks and the
-detectors run again (82.0% gave the same verdict as before). The pipeline took 0.03 s per photo on a
-Tesla T4.
+skips). 45 of the 200 AI photos (22.5%) were stamped as Real, the system metric from the proposal,
+against 46.5% when M1 alone made the verdict; 5 Real photos were stamped as AI, and 24.8% of photos were
+Uncertain. When a stamped output was fed back in, 94.8% were answered from the stamp (all with the same
+verdict as the first pass), 90.2% after JPEG quality 90 (99.0% the same verdict), and 15.8% after a VAE
+round trip, where the stamp breaks and the detectors run again (70.2% gave the same verdict as before).
+The pipeline took 0.05 s per photo on a Tesla T4.

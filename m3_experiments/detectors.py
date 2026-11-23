@@ -9,9 +9,9 @@ because M1's preprocessing picks its JPEG quality from it.
   M1Detector     the real M1 (Kruthika), loaded from the M1 notebook's own modules and best.pt.
                  Its preprocessing is M1's own preprocess_native + centre 224 crop.
                  Confirm the paths and steps with Kruthika before using its numbers.
-  M2Detector     placeholder until Supriya's model is ready: fill in _load and __call__.
-  late_fusion    average of M1 and M2, the ablation in docs/decisions.md item 11. Use it until the
-                 trained fusion model exists, and say so in the report.
+  M2Detector     the real M2 (Supriya): frozen CLIP ViT-B/16 + MLP head, with M2's own preprocessing.
+  late_fusion    (M1 + M2) / 2, the team's Late Fusion (README_FUSION.md), the stronger fusion on unseen
+                 generators (mean AUROC 0.925 against 0.840 for Early Fusion).
 """
 from __future__ import annotations
 
@@ -69,19 +69,87 @@ class M1Detector:
 
 
 class M2Detector:
-    """TODO when Supriya's M2 is ready: load the frozen CLIP + MLP head and use her exact
-    preprocessing (resize, crop, CLIP normalisation)."""
-    name = 'm2_clip'
+    """M2 (Supriya): frozen CLIP ViT-B/16 image encoder + a small MLP head (models/m2_clip.py).
 
-    def __init__(self, *args, **kwargs):
-        raise NotImplementedError('M2 is not ready yet. Ask Supriya for the checkpoint and preprocessing.')
+    The checkpoint holds only the head ({"head", "config", "clip_name", "feature_dim"}); CLIP itself is
+    downloaded from Hugging Face. The preprocessing is M2's own, copied from
+    preprocessing/build_m2_caches_from_splits.py and preprocessing/datasets.NativeCacheDataset: JPEG
+    re-encode at a quality fixed per image (SHA-256 of the image id, 75-95, 4:2:0), centre 256 tile,
+    centre 224 crop (aligned to 8), CLIP normalisation, CLIP image features, head, sigmoid.
+    """
+    name = 'm2_clip'
+    CLIP_MEAN = (0.48145466, 0.4578275, 0.40821073)
+    CLIP_STD = (0.26862954, 0.26130258, 0.27577711)
+
+    def __init__(self, checkpoint, device=None):
+        import torch
+        from torch import nn
+        from transformers import CLIPModel
+        self.torch = torch
+        self.device = torch.device(device or ('cuda' if torch.cuda.is_available() else 'cpu'))
+        ck = torch.load(checkpoint, map_location='cpu', weights_only=False)
+        cfg = ck['config']
+        self.clip_name = ck.get('clip_name', cfg['model'].get('clip_name', 'openai/clip-vit-base-patch16'))
+        self.clip = CLIPModel.from_pretrained(self.clip_name).to(self.device).eval()
+        dim = int(ck.get('feature_dim', self.clip.config.projection_dim))
+        head_cfg = cfg['model'].get('head', {})
+        hidden, dropout = int(head_cfg.get('hidden', 256)), float(head_cfg.get('dropout', 0.2))
+        head = nn.Module()
+        head.net = nn.Sequential(nn.Linear(dim, hidden), nn.GELU(), nn.Dropout(dropout), nn.Linear(hidden, 1))
+        head.load_state_dict(ck['head'])                     # same keys as models/m2_clip.MLPHead
+        self.head = head.to(self.device).eval()
+        p = cfg.get('preprocess', {})
+        self.crop, self.align, self.tile = int(p.get('crop_size', 224)), int(p.get('align', 8)), 256
+        self.jpeg_low, self.jpeg_high = 75, 95
+        self.size = int(self.clip.config.vision_config.image_size)
+
+    def jpeg_quality(self, image_id):
+        import hashlib
+        digest = hashlib.sha256(str(image_id).encode('utf-8')).digest()
+        return self.jpeg_low + (int.from_bytes(digest[:8], 'big') % (self.jpeg_high - self.jpeg_low + 1))
+
+    def preprocess(self, photo, image_id):
+        import io
+        from PIL import Image
+        rgb = photo.convert('RGB')
+        width, height = rgb.size
+        buffer = io.BytesIO()
+        rgb.save(buffer, format='JPEG', quality=self.jpeg_quality(image_id), subsampling=2)
+        buffer.seek(0)
+        with Image.open(buffer) as decoded_source:
+            decoded = np.asarray(decoded_source.convert('RGB'), dtype=np.uint8)
+        vh, vw, a, c = min(self.tile, height), min(self.tile, width), self.align, self.crop
+        top, left = ((height - vh) // 2) // a * a, ((width - vw) // 2) // a * a
+        tile = np.zeros((self.tile, self.tile, 3), dtype=np.uint8)          # as in M2's native cache
+        tile[:vh, :vw] = decoded[top:top + vh, left:left + vw]
+        # NativeCacheDataset crops the centre of the full 256 tile: its cache JSON keeps the valid size per
+        # row, not at the top level, so it never finds it. A photo under 256 px on a side therefore gets a
+        # little zero padding in its crop, exactly as M2 saw it in training and evaluation (9 of the 1,300
+        # GenImage test photos).
+        off = ((self.tile - c) // 2) // a * a
+        crop = np.ascontiguousarray(tile[off:off + c, off:off + c])
+        return self.torch.from_numpy(crop).permute(2, 0, 1).float().div(255).unsqueeze(0)
 
     def __call__(self, photo, image_id=''):
-        raise NotImplementedError
+        torch = self.torch
+        x = self.preprocess(photo, image_id).to(self.device)
+        mean = torch.tensor(self.CLIP_MEAN, device=self.device).view(1, 3, 1, 1)
+        std = torch.tensor(self.CLIP_STD, device=self.device).view(1, 3, 1, 1)
+        x = (x - mean) / std
+        if x.shape[-2:] != (self.size, self.size):
+            x = torch.nn.functional.interpolate(x, size=(self.size, self.size), mode='bicubic', align_corners=False)
+        with torch.no_grad():
+            out = self.clip.get_image_features(pixel_values=x)
+            if hasattr(out, 'pooler_output'):                # transformers 5.x, as in models/m2_clip.py
+                out = out.pooler_output
+            elif isinstance(out, tuple):
+                out = out[0]
+            p = torch.sigmoid(self.head.net(out.float()).squeeze(-1))
+        return {'p_ai': float(p[0]), 'features': out[0].cpu().numpy()}
 
 
 def late_fusion(m1_out, m2_out):
-    """Average of the two probabilities (late fusion ablation). Replace with the trained fusion model."""
+    """Late Fusion from README_FUSION.md: the average of the M1 and M2 probabilities."""
     return {'p_ai': (m1_out['p_ai'] + m2_out['p_ai']) / 2, 'features': None}
 
 
