@@ -1,33 +1,90 @@
 {
   "detectors": [
-    "m1_resnet"
+    "m1_resnet",
+    "m2_clip",
+    "fusion"
   ],
-  "decide_with": "m1_resnet",
+  "decide_with": "fusion",
   "thresholds": {
     "m1_resnet": [
       0.35,
       0.65
     ],
     "m2_clip": [
-      0.35,
-      0.65
+      0.30498576164245605,
+      0.8747249841690063
     ],
     "fusion": [
-      0.35,
-      0.65
+      0.32486581802368164,
+      0.7542786598205566
     ],
     "dummy": [
       0.35,
       0.65
     ]
   },
+  "threshold_source": {
+    "m1_resnet": "placeholder",
+    "m2_clip": "/kaggle/input/datasets/elsarose2025/veristamp-m3-inputs/veristamp-m2/m2/thresholds.json",
+    "fusion": "/kaggle/input/datasets/elsarose2025/veristamp-m3-inputs/veristamp-m2/fusion/late_thresholds.json",
+    "dummy": "placeholder"
+  },
   "n_per_class": 300,
-  "fusion": null,
+  "fusion": "late (average)",
+  "auroc_check_sd": [
+    {
+      "detector": "fusion",
+      "n_photos": 444,
+      "auroc_here": 0.8736,
+      "reported": 0.878,
+      "close": true
+    },
+    {
+      "detector": "m1_resnet",
+      "n_photos": 444,
+      "auroc_here": 0.6843,
+      "reported": 0.712,
+      "close": true
+    },
+    {
+      "detector": "m2_clip",
+      "n_photos": 444,
+      "auroc_here": 0.9092,
+      "reported": 0.9064,
+      "close": true
+    }
+  ],
+  "photo_check": [
+    {
+      "detector": "m1_resnet",
+      "n_photos": 600,
+      "mean_abs_diff": 0.0,
+      "max_abs_diff": 0.0,
+      "correlation": 1.0,
+      "same_as_owner": true
+    },
+    {
+      "detector": "m2_clip",
+      "n_photos": 600,
+      "mean_abs_diff": 0.0,
+      "max_abs_diff": 1e-05,
+      "correlation": 1.0,
+      "same_as_owner": true
+    },
+    {
+      "detector": "fusion",
+      "n_photos": 600,
+      "mean_abs_diff": 0.0,
+      "max_abs_diff": 1e-05,
+      "correlation": 1.0,
+      "same_as_owner": true
+    }
+  ],
   "environment": {
     "python": "3.13.16",
     "torch": "2.11.0+cu130",
     "cuda": true,
-    "date": "2026-11-21 03:50:30",
+    "date": "2026-11-22 23:27:31",
     "gpu": "Tesla T4",
     "diffusers": "0.42.0",
     "transformers": "5.20.2",

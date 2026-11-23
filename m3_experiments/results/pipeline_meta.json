@@ -1,18 +1,21 @@
 {
   "detectors": [
-    "m1_resnet"
+    "m1_resnet",
+    "m2_clip",
+    "fusion"
   ],
-  "decide_with": "m1_resnet",
+  "decide_with": "fusion",
   "thresholds": [
-    0.35,
-    0.65
+    0.32486581802368164,
+    0.7542786598205566
   ],
+  "threshold_source": "/kaggle/input/datasets/elsarose2025/veristamp-m3-inputs/veristamp-m2/fusion/late_thresholds.json",
   "n_per_class": 200,
   "environment": {
     "python": "3.13.16",
     "torch": "2.11.0+cu130",
     "cuda": true,
-    "date": "2026-11-21 04:03:01",
+    "date": "2026-11-22 23:40:30",
     "gpu": "Tesla T4",
     "diffusers": "0.42.0",
     "transformers": "5.20.2",

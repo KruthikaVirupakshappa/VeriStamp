@@ -27,9 +27,9 @@ The first five rows repeat notebook 4 (notebook 5; the same as section 1 of the 
 
 | Detector | Score change, real photos | Score change, AI photos | Verdict flips | Accuracy before / after |
 |---|---|---|---|---|
-| M1 | +0.0049 [-0.0048, +0.0147] | -0.0076 [-0.0204, +0.0057] | 51 of 600 (2 Real to AI, 2 AI to Real, 47 to or from Uncertain) | 67.50% / 67.17% |
-| M2 | not run yet | not run yet | not run yet | not run yet |
-| Fusion | not run yet | not run yet | not run yet | not run yet |
+| M1 | +0.0043 [-0.0061, +0.0144] | -0.0130 [-0.0249, -0.0015] | 53 of 600 (0 Real to AI, 1 AI to Real, 52 to or from Uncertain) | 67.50% / 66.67% |
+| M2 | +0.0626 [+0.0478, +0.0795] | +0.0531 [+0.0314, +0.0748] | 118 of 600 (3 Real to AI, 1 AI to Real, 114 to or from Uncertain) | 82.50% / 83.17% |
+| Late Fusion | +0.0335 [+0.0235, +0.0440] | +0.0200 [+0.0076, +0.0327] | 72 of 600 (0 Real to AI, 0 AI to Real, 72 to or from Uncertain) | 75.17% / 75.17% |
 
 ### Stamp on GenImage photos
 
@@ -46,19 +46,19 @@ The first five rows repeat notebook 4 (notebook 5; the same as section 1 of the 
 |---|---|
 | photos | 400 |
 | false skips (unstamped photo read as stamped) | 0 |
-| AI photos stamped as Real | 93 of 200 (46.5%) |
-| Real photos stamped as AI | 13 |
-| Uncertain share | 6.8% |
-| mean seconds per photo (first pass) | 0.0290 |
-| returned as PNG: answered from stamp | 93.5% |
-| returned as PNG: same verdict as first pass | 99.5% |
-| returned after JPEG 90: answered from stamp | 88.5% |
-| returned after JPEG 90: same verdict as first pass | 98.8% |
-| returned after VAE round trip: answered from stamp | 17.8% |
-| returned after VAE round trip: same verdict as first pass | 82.0% |
+| AI photos stamped as Real | 45 of 200 (22.5%) |
+| Real photos stamped as AI | 5 |
+| Uncertain share | 24.8% |
+| mean seconds per photo (first pass) | 0.0490 |
+| returned as PNG: answered from stamp | 94.8% |
+| returned as PNG: same verdict as first pass | 100.0% |
+| returned after JPEG 90: answered from stamp | 90.2% |
+| returned after JPEG 90: same verdict as first pass | 99.0% |
+| returned after VAE round trip: answered from stamp | 15.8% |
+| returned after VAE round trip: same verdict as first pass | 70.2% |
 
 | class | Real | Uncertain | AI |
 |---|---|---|---|
-| AI | 93 | 15 | 92 |
-| Real | 175 | 12 | 13 |
+| AI | 45 | 79 | 76 |
+| Real | 175 | 20 | 5 |
 

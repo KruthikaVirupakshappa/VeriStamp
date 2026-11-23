@@ -94,16 +94,17 @@ session.
 - Bit accuracy, valid verdict and invalidation rate are always reported separately, plus "wrong but
   valid" (the checksum passed but the message is wrong), which should stay near 0.
 
-## Waiting on others
+## Inputs from the other workstreams (all in place)
 
-| Need | From | Used in |
+| Input | From | Used in |
 |---|---|---|
-| `hidden_data/test`, anything odd in M3 results | Rishitha | all |
-| GenImage test photos: run `get_genimage_test_photos.ipynb` in Colab (reads the 1,300 photos of M1's test split from the official GenImage archives and checks each against M1's SHA-1) | you | 10, 11, 12 |
-| M1 `best.pt`, the `vslib_m1_final` folder, confirmation of the preprocessing in `detectors.M1Detector` | Kruthika | 11, 12 |
-| M2 checkpoint and exact preprocessing (fill in `detectors.M2Detector`) | Supriya | 11, 12 |
-| Fusion model owner, and the fitted Uncertain thresholds (`settings.THRESHOLDS`) | team | 11, 12 |
+| `hidden_data/test` list (500 COCO photos), M3 `best.pt` | Rishitha (Drive link in `../m3_watermark/README.md`) | all |
+| GenImage test photos: `get_genimage_test_photos.ipynb` (Colab) reads M1's 1,300 test photos from the official archives and checks each against M1's SHA-1 | official GenImage archives | 10, 11, 12 |
+| M1 `best.pt` (fold 1, SD v1.4 unseen) and `vslib_m1_final` | Kruthika | 11, 12 |
+| M2 `best.pt`, `thresholds.json` (fold `stable_diffusion_v_1_4`) and its test predictions | Supriya | 11, 12 |
+| Late Fusion `late_thresholds.json` (same fold) and its test predictions | Supriya | 11, 12 |
 
-Until M2 and fusion exist, notebooks 11 and 12 run with the dummy detector (results are saved with
-`_DUMMY` in the name and never used in the report). M1 is ready: set `USE_M1 = True` once its paths
-are set. If M2 is still missing near the deadline, run RQ3 on M1 alone, as the guide suggests.
+`prepare_kaggle_inputs.py` builds the Kaggle dataset from these (`--m1-*`, `--m2-*`,
+`--fusion-thresholds`, `--reference-predictions`). Notebook 11 checks, before stamping, that every
+detector reproduces its owner's score for each photo. Still a placeholder: M1's Uncertain thresholds
+(0.35 / 0.65), which affect only M1's verdict counts.

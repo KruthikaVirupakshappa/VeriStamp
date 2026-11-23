@@ -21,9 +21,9 @@ KAGGLE_INPUT = Path('/kaggle/input')
 
 
 def _kaggle(rel):
-    """Find <rel> (for example 'm3/best.pt') up to three folders deep in the Kaggle inputs, so the
+    """Find <rel> (for example 'm3/best.pt') up to six folders deep in the Kaggle inputs, so the
     dataset can have any name and Kaggle's extra folder from an uploaded zip does not matter."""
-    for depth in range(4):
+    for depth in range(7):
         hits = sorted(KAGGLE_INPUT.glob('/'.join(['*'] * depth + [rel])))
         if hits:
             return hits[0]
@@ -74,6 +74,27 @@ M1_VSLIB_DIR = _path('M3E_M1_VSLIB_DIR', '/content/drive/MyDrive/VeriStamp/vslib
 M1_CHECKPOINT = _path('M3E_M1_CHECKPOINT',
                       '/content/drive/MyDrive/VeriStamp/experiments/m1_final_n500/hp_fft/best.pt',
                       'm1/best.pt')
+
+# M2 (task 9, 10): Supriya's fold with Stable Diffusion held out, the same fold as M1 above:
+# experiments/m2_m1_aligned_n500_seed42/m2_final_n500_fold_stable_diffusion_v_1_4/best.pt
+M2_CHECKPOINT = _path('M3E_M2_CHECKPOINT', '/content/drive/MyDrive/VeriStamp/m2/best.pt', 'm2/best.pt')
+
+# The detector owners' own clean scores for the 1,300 test photos (image_id, m1_resnet, m2_clip, fusion),
+# from M2's predictions_test_*.csv and Late Fusion's predictions_test_*_late.csv (m1 = 2 x late - m2).
+# RQ3 checks photo by photo that the detectors here reproduce them before stamping.
+REFERENCE_PREDICTIONS = _path('M3E_REFERENCE_PREDICTIONS', '/content/drive/MyDrive/VeriStamp/m2/reference_predictions.csv',
+                              'm2/reference_predictions.csv')
+
+# Uncertain thresholds fitted on validation by the detector owners (same fold). Each file is
+# {"t_low": ..., "t_high": ...}. Missing files fall back to the placeholders in THRESHOLDS below.
+#   M2:     .../m2_final_n500_fold_stable_diffusion_v_1_4/thresholds.json
+#   Fusion: experiments/fusion_m1_m2_aligned_n500_seed42/fold_stable_diffusion_v_1_4/late_thresholds.json
+THRESHOLD_FILES = {
+    'm1_resnet': _path('M3E_M1_THRESHOLDS', '/content/drive/MyDrive/VeriStamp/m1/thresholds.json', 'm1/thresholds.json'),
+    'm2_clip': _path('M3E_M2_THRESHOLDS', '/content/drive/MyDrive/VeriStamp/m2/thresholds.json', 'm2/thresholds.json'),
+    'fusion': _path('M3E_FUSION_THRESHOLDS', '/content/drive/MyDrive/VeriStamp/fusion/late_thresholds.json',
+                    'fusion/late_thresholds.json'),
+}
 # ---------------------------------------------------------------------------------------------------
 
 # Fixed settings. Do not change them between runs, or results stop being comparable.
@@ -87,6 +108,18 @@ INPAINT_PROMPT = 'a natural photo'
 # checkpoints/thresholds_<model>.json once the team has chosen them (docs/decisions.md, item 10).
 THRESHOLDS = {'m1_resnet': (0.35, 0.65), 'm2_clip': (0.35, 0.65), 'fusion': (0.35, 0.65),
               'dummy': (0.35, 0.65)}
+THRESHOLD_SOURCE = {name: 'placeholder' for name in THRESHOLDS}
+
+
+def load_fitted_thresholds():
+    '''Replace the placeholders with the validation-fitted thresholds where their files exist.'''
+    import json
+    for name, path in THRESHOLD_FILES.items():
+        if path.exists():
+            d = json.loads(path.read_text())
+            THRESHOLDS[name] = (float(d['t_low']), float(d['t_high']))
+            THRESHOLD_SOURCE[name] = str(path)
+    return THRESHOLDS
 
 
 def _photos_in(folder):
@@ -116,6 +149,7 @@ def setup():
         if _photos_in(TEST_DIR) < len(names):
             print(f'Downloading {len(names)} test photos from COCO val2017 into {TEST_DIR} ...', flush=True)
             download_coco(names, TEST_DIR)
+    load_fitted_thresholds()
     missing = [str(p) for p in (M3_DIR / 'm3_watermark.py', MODEL_PATH, TEST_DIR) if not p.exists()]
     if missing:
         hint = ('On Kaggle: attach the input dataset (README.md, "Running on Kaggle"). Found under '
