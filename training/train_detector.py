@@ -17,7 +17,7 @@ from common.config import load_config
 from common.seed import get_device, set_seed
 from models.m2_clip import M2Detector
 from models.thresholds import fit_thresholds, save_thresholds, to_verdict
-from preprocessing.datasets import NativeCacheDataset
+from preprocessing.datasets import NativeCacheDataset, NativeImageDataset
 
 
 def collate(batch):
@@ -39,7 +39,7 @@ def extract_embeddings(model, loader, device):
         labels.append(y.cpu())
         ids.extend(m["image_id"] for m in metas)
         generators.extend(m["generator"] for m in metas)
-        cache_indices.extend(m["cache_index"] for m in metas)
+        cache_indices.extend(m.get("cache_index", -1) for m in metas)
     if not emb:
         raise ValueError("No images found in split")
     return {"emb": torch.cat(emb), "labels": torch.cat(labels), "ids": ids,
@@ -133,7 +133,8 @@ def three_way_metrics(result, thresholds):
             "uncertain": int((~decided).sum())}
 
 
-def train_fold(cfg, split_dir: Path, cache_dir: Path, run_dir: Path, device, args):
+def train_fold(cfg, split_dir: Path, cache_dir: Path, run_dir: Path, device, args,
+               fold_name: str | None = None):
     if not split_dir.exists():
         raise FileNotFoundError(f"Split directory not found: {split_dir}")
     if not cache_dir.exists():
@@ -167,7 +168,28 @@ def train_fold(cfg, split_dir: Path, cache_dir: Path, run_dir: Path, device, arg
                                     device, embedding_dir / f"{split}.pt")
             for split in split_names}
 
-    train_loader = DataLoader(TensorDataset(data["train"]["emb"], data["train"]["labels"]),
+    if args.augmented_train_csv_root:
+        if not fold_name:
+            raise ValueError("fold name is required when using augmented training")
+        augmented_csv = Path(args.augmented_train_csv_root) / f"{fold_name}.csv"
+        if not augmented_csv.exists():
+            raise FileNotFoundError(f"Augmented train manifest not found: {augmented_csv}")
+        jpeg_range = tuple(cfg["preprocess"]["jpeg_quality_range"])
+        augmented_dataset = NativeImageDataset(
+            augmented_csv, args.augmented_train_image_root, "stamped_file",
+            crop_size=crop_size, tile_size=int(cfg["preprocess"]["tile_size"]),
+            align=align, seed=int(cfg["seed"]), jpeg_quality_range=jpeg_range)
+        augmented = cache_embeddings(
+            model, image_loader(augmented_dataset, batch_size, args.workers), device,
+            embedding_dir / "train_stamped.pt")
+        train_emb = torch.cat([data["train"]["emb"], augmented["emb"]])
+        train_labels = torch.cat([data["train"]["labels"], augmented["labels"]])
+        print(f"augmented_train_images={len(augmented_dataset)}")
+    else:
+        train_emb = data["train"]["emb"]
+        train_labels = data["train"]["labels"]
+
+    train_loader = DataLoader(TensorDataset(train_emb, train_labels),
                               batch_size=batch_size, shuffle=True)
     optimizer = torch.optim.AdamW(model.head.parameters(), lr=float(cfg["train"]["lr"]),
                                   weight_decay=float(cfg["train"]["weight_decay"]))
@@ -240,8 +262,14 @@ def main():
     parser.add_argument("--fold", default="all", help="all or a generator name when using --fold-spec")
     parser.add_argument("--run-dir", required=True)
     parser.add_argument("--workers", type=int, default=0)
+    parser.add_argument("--augmented-train-csv-root", default=None,
+                        help="Directory with one stamped train CSV per fold")
+    parser.add_argument("--augmented-train-image-root", default=None,
+                        help="Root directory for stamped training image paths")
     args = parser.parse_args()
     cfg = load_config(args.config)
+    if bool(args.augmented_train_csv_root) != bool(args.augmented_train_image_root):
+        parser.error("Both augmented training arguments are required together")
     set_seed(int(cfg["seed"]))
     device = get_device(cfg.get("device", "auto"))
     root_run = Path(args.run_dir)
@@ -256,7 +284,8 @@ def main():
         for held_out in folds:
             entry = spec["folds"][held_out]
             metrics = train_fold(cfg, Path(entry["split_dir"]), Path(entry["cache_dir"]),
-                                 root_run / f"m2_final_n500_fold_{held_out}", device, args)
+                                 root_run / f"m2_final_n500_fold_{held_out}", device, args,
+                                 fold_name=held_out)
             summary[held_out] = {"best_val_auroc": metrics["best_val_auroc"],
                                  "test_unseen_auroc": metrics["splits"]["test_unseen"]["auroc"]}
         (root_run / "m2_all_folds_summary.json").parent.mkdir(parents=True, exist_ok=True)

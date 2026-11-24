@@ -123,16 +123,20 @@ stamp. Scoring the same photo twice gives identical scores. We report the mean c
 Real and for AI photos with 95% bootstrap intervals, the number of verdicts that change (Real, AI or
 Uncertain), and accuracy and AUROC before and after stamping.
 
-M2 and the fusion model were not ready in time, so RQ3 was run on M1 only. M1 is the detector most
-exposed to the stamp: it looks at high-frequency detail, which is where the stamp's pattern lies.
+M1 was not retrained for this analysis. M2 was first evaluated with its original training, then
+retrained with stamped training images added to the training split. Validation and test images stayed
+clean. Fusion was then retrained using the updated M2 outputs. The 600 RQ3 photos use the Stable
+Diffusion held-out fold: 444 are from `test_unseen` and 156 are from `test_seen`.
 
 ### Results
 
-| Detector | Score change, real photos | Score change, AI photos | Verdict flips | Accuracy before and after |
-|---|---|---|---|---|
-| M1 | +0.005 [−0.005, +0.015] | −0.008 [−0.020, +0.006] | 51 of 600 (2 Real→AI, 2 AI→Real, 47 to or from Uncertain) | 67.5% / 67.2% |
-| M2 | not run (model not ready) | | | |
-| Fusion | not run (needs M2) | | | |
+| Detector | Mean score change, Real photos | Verdict flips | AUROC before and after |
+|---|---|---|---|
+| M1 | +0.005 [−0.005, +0.015] | 51 of 600 (2 Real→AI, 2 AI→Real, 47 to or from Uncertain) | 0.754 / 0.748 |
+| M2, original training | +0.0645 | 21.2% | 0.9339 / 0.9222 |
+| M2, stamp-augmented training | +0.0225 | 17.2% | 0.9173 / 0.9094 |
+| Late Fusion, original M2 | +0.0344 | 13.7% | 0.9030 / 0.8937 |
+| Late Fusion, updated M2 | +0.0134 | 13.2% | 0.8880 / 0.8777 |
 
 On average the stamp does not move M1's scores: both mean changes are close to zero and their 95%
 intervals include zero, so the stamp does not push M1 towards "Real" or towards "AI". Accuracy
@@ -143,18 +147,27 @@ ADM, 0.049 for VQDM and 0.048 for Stable Diffusion v1.4). As a result 51 of the 
 almost all between a firm verdict and Uncertain; a Real photo became AI in 2 cases and an AI photo
 became Real in 2. At a single threshold of 0.5, 22 of 600 predictions flip.
 
-The answer to RQ3, for M1, is that the stamp adds noise to individual scores but no systematic bias.
-This fits the proposal's expectation that a frequency-based detector reacts to the stamp. Whether the
-CLIP-based M2 reacts less, as the proposal expects, could not be tested and is left for future work.
+The answer to RQ3 is different for the detectors. M1 adds noise to individual scores but shows no
+clear systematic shift. The original M2 model shifted Real photos towards AI, with a mean change of
+about +0.0645. This was reduced to +0.0225 after adding stamped training images. The Late Fusion
+shift was reduced from +0.0344 to +0.0134 after the M2 update. Verdict flips also decreased for M2
+and Late Fusion. The updated model therefore reduces stamp sensitivity, but it does not remove it
+completely. AUROC also decreased slightly after the robustness update, so the change is a trade-off
+between ordinary detector performance and stamp robustness.
+
+For the three leave-one-generator-out M2 evaluation, the updated test-unseen AUROC values were
+0.8821 for Stable Diffusion v1.4, 0.9548 for ADM, and 0.9498 for VQDM, with a mean of 0.9289.
+The corresponding Late Fusion AUROC values were 0.8575, 0.9447, and 0.9536, with a mean of 0.9186.
+These results use the same fold definitions as M1. They are reported separately from the clean-data
+comparison because RQ3 is a robustness test.
 
 ---
 
 ## The decode, detect and stamp pipeline
 
 The pipeline first reads the stamp. If the checksum passes, it returns the stored verdict and skips
-the detectors. Otherwise it runs the detectors (here M1 alone, as M2 and fusion were not ready), turns
-P(AI) into Real, AI or Uncertain with the thresholds (placeholders 0.35 and 0.65 until the team fits
-them on validation), and stamps that verdict into the photo with M3. A valid stamp only means that our
+the detectors. Otherwise it runs M1, M2 and Late Fusion, then turns P(AI) into Real, AI or Uncertain
+with thresholds fitted on clean validation data. A valid stamp only means that our
 detector gave that verdict when the photo was stamped: the stamp is not signed, so it is not proof
 that the photo is authentic.
 
