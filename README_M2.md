@@ -69,3 +69,22 @@ Two training variations were tested to reduce the train-validation gap. Stronger
 A regularization-only setup with higher dropout and weight decay produced almost the same mean AUROC as the baseline. Therefore, the original baseline configuration was kept as the final M2 model, while the other settings were treated as ablation experiments.
 
 Overall, the results suggest that M2 learns useful features that transfer across generators, although generator differences and JPEG compression can still affect performance.
+
+## Stamp robustness follow-up
+
+The RQ3 images were checked against the split file using `image_id` and the original SHA-1 hash. All 600 images use the Stable Diffusion fold checkpoint. There are 444 `test_unseen` images and 156 `test_seen` images.
+
+The clean and stamped images were paired by image ID. M2 was then retrained with stamped versions of the exact training images for all three folds. The clean training images stayed in the training set. M1 was not retrained.
+
+The stamp payload used the clean-image Late Fusion verdict and P(AI), as required by the M3 settings. The stamp was not created from the true label.
+
+The new M2 test-unseen AUROC was:
+
+| Held-out generator | Stamp-augmented M2 AUROC |
+|---|---:|
+| Stable Diffusion v1.4 | 0.8821 |
+| ADM | 0.9548 |
+| VQDM | 0.9498 |
+| Mean | 0.9289 |
+
+On the corrected RQ3 test set, the M2 Real-image score shift decreased from about `+0.065` to `+0.022`. This shows that stamp augmentation reduced the shortcut caused by the stamp. Thresholds were fitted with stamped validation images and were kept separate from the normal test thresholds.

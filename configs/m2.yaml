@@ -11,6 +11,7 @@ model:
   head: {hidden: 256, dropout: 0.2}
 preprocess:
   mode: native_cache
+  tile_size: 256
   crop_size: 224
   align: 8
 train:

@@ -10,11 +10,15 @@ in-distribution splits with all generators.
 from __future__ import annotations
 
 import json
+import io
+import random
+import zlib
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import torch
+from PIL import Image
 from torch.utils.data import Dataset
 
 from preprocessing.transforms import load_rgb, preprocess
@@ -106,3 +110,61 @@ class NativeCacheDataset(Dataset):
                 "split": row.get("split", ""), "cache_index": i,
                 "image_path": row.get("image_path", row.get("path", ""))}
         return x01, torch.tensor(int(row["label"])), meta
+
+
+class NativeImageDataset(Dataset):
+    """Read stamped images with the exact native-cache preprocessing."""
+
+    def __init__(self, manifest: str | Path, image_root: str | Path,
+                 image_column: str, crop_size: int, tile_size: int, align: int,
+                 seed: int, jpeg_quality_range: tuple[int, int]):
+        self.rows = pd.read_csv(manifest).reset_index(drop=True)
+        required = {"image_id", "label", "generator", image_column}
+        missing = required - set(self.rows.columns)
+        if missing:
+            raise ValueError(f"{manifest} is missing required columns: {sorted(missing)}")
+        self.image_root = Path(image_root)
+        self.image_column = image_column
+        self.crop_size = int(crop_size)
+        self.tile_size = int(tile_size)
+        self.align = int(align)
+        self.seed = int(seed)
+        self.jpeg_low, self.jpeg_high = map(int, jpeg_quality_range)
+
+    def __len__(self):
+        return len(self.rows)
+
+    def __getitem__(self, i: int):
+        row = self.rows.iloc[i]
+        path = self.image_root / str(row[self.image_column])
+        if not path.exists():
+            raise FileNotFoundError(f"Stamped image not found: {path}")
+        with Image.open(path) as image:
+            rgb = image.convert("RGB")
+            width, height = rgb.size
+            quality_rng = random.Random(zlib.crc32(
+                f"{self.seed}:{row['image_id']}".encode()))
+            quality = quality_rng.randint(self.jpeg_low, self.jpeg_high)
+            buffer = io.BytesIO()
+            rgb.save(buffer, format="JPEG", quality=quality, subsampling=2)
+            buffer.seek(0)
+            with Image.open(buffer) as decoded_image:
+                decoded = np.asarray(decoded_image.convert("RGB"), dtype=np.uint8).copy()
+        valid_h, valid_w = min(self.tile_size, height), min(self.tile_size, width)
+        top = ((height - valid_h) // 2) // self.align * self.align
+        left = ((width - valid_w) // 2) // self.align * self.align
+        tile = decoded[top:top + valid_h, left:left + valid_w]
+        crop_top = ((valid_h - self.crop_size) // 2) // self.align * self.align
+        crop_left = ((valid_w - self.crop_size) // 2) // self.align * self.align
+        crop = np.ascontiguousarray(tile[crop_top:crop_top + self.crop_size,
+                                         crop_left:crop_left + self.crop_size])
+        if crop.shape[:2] != (self.crop_size, self.crop_size):
+            raise ValueError(f"Unexpected native crop for {row['image_id']}: {crop.shape}")
+        x01 = torch.from_numpy(crop).permute(2, 0, 1).float().div_(255.0)
+        return x01, torch.tensor(int(row["label"])), {
+            "image_id": str(row["image_id"]),
+            "generator": str(row["generator"]),
+            "cache_index": -1,
+            "image_path": str(path),
+            "jpeg_quality": quality,
+        }

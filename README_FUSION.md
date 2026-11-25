@@ -137,3 +137,25 @@ Fusion was completed for all three leave-one-generator-out folds, including vali
 Early Fusion demonstrates that feature concatenation is possible, but its nearly perfect training performance and lower unseen-generator AUROC show that it overfits in this dataset size and setup. Late Fusion is the more reliable Fusion method because it has higher mean unseen AUROC and lower variation across folds.
 
 Therefore, the project should report Early Fusion as the feature-level Fusion experiment and Late Fusion as the stronger comparison or practical Fusion result. M2 alone still remains an important baseline because it performed strongly on unseen generators without requiring the additional Fusion head.
+
+## Stamp robustness follow-up
+
+After the M2 stamp-augmentation run, Fusion was retrained with the new M2 outputs. M1 stayed frozen. The new Late Fusion unseen-generator AUROC values were:
+
+| Held-out generator | Updated Late Fusion AUROC |
+|---|---:|
+| Stable Diffusion v1.4 | 0.8575 |
+| ADM | 0.9447 |
+| VQDM | 0.9536 |
+| Mean | 0.9186 |
+
+On the corrected RQ3 test set, the Late Fusion Real-image score shift decreased from about `+0.034` to `+0.013`. The verdict flip rate decreased from about `14%` to `13%`.
+
+This follow-up shows a trade-off. Stamp augmentation reduces the effect of the stamp, but it can reduce normal unseen-generator AUROC for some folds. The stamp-augmented run is therefore reported as a robustness experiment. The original baseline remains the main comparison run.
+
+The updated outputs are saved under:
+
+```text
+experiments/m2_stamp_augmented_m1_aligned_n500_seed42/
+experiments/fusion_stamp_augmented_m1_m2_aligned_n500_seed42/
+```
