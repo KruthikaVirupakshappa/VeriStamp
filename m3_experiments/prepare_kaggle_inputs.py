@@ -209,6 +209,12 @@ def main(argv=None):
     ap.add_argument('--download-photos', action='store_true', help='download the listed test photos now instead')
     ap.add_argument('--m1-checkpoint', type=Path)
     ap.add_argument('--m1-vslib', type=Path, help="the folder of .py files M1's notebook wrote (vslib_m1_final)")
+    ap.add_argument('--m2-checkpoint', type=Path, help="M2's best.pt (fold stable_diffusion_v_1_4)")
+    ap.add_argument('--m2-thresholds', type=Path, help="M2's thresholds.json (same fold)")
+    ap.add_argument('--fusion-thresholds', type=Path, help="Late Fusion's late_thresholds.json (same fold)")
+    ap.add_argument('--reference-predictions', type=Path,
+                    help='the owners\' clean scores per test photo (image_id, m1_resnet, m2_clip, fusion)')
+    ap.add_argument('--m1-thresholds', type=Path, help="M1's fitted thresholds, if there are any")
     ap.add_argument('--genimage-splits', type=Path, help='folder with test_seen.csv and test_unseen.csv')
     ap.add_argument('--genimage-root', type=Path, help='the folder the image_path values start from')
     ap.add_argument('--no-code', action='store_true', help='leave out code/ (the notebooks then clone the repo)')
@@ -258,6 +264,27 @@ def main(argv=None):
         shutil.copy2(a.m1_checkpoint, out / 'm1' / 'best.pt')
     if a.m1_vslib:
         shutil.copytree(a.m1_vslib, out / 'm1' / 'vslib_m1_final', dirs_exist_ok=True, ignore=SKIP_IN_CODE)
+    if a.m2_checkpoint:
+        import torch
+        ck = torch.load(a.m2_checkpoint, map_location='cpu', weights_only=False)
+        if 'head' not in ck:
+            raise SystemExit(f'{a.m2_checkpoint} is not an M2 checkpoint (no "head"): use '
+                             'm2_final_n500_fold_stable_diffusion_v_1_4/best.pt')
+        (out / 'm2').mkdir(exist_ok=True)
+        shutil.copy2(a.m2_checkpoint, out / 'm2' / 'best.pt')
+        info['m2_sha256'] = sha256(out / 'm2' / 'best.pt')
+    if a.reference_predictions:
+        (out / 'm2').mkdir(exist_ok=True)
+        shutil.copy2(a.reference_predictions, out / 'm2' / 'reference_predictions.csv')
+    for flag, folder, name in ((a.m2_thresholds, 'm2', 'thresholds.json'),
+                               (a.fusion_thresholds, 'fusion', 'late_thresholds.json'),
+                               (a.m1_thresholds, 'm1', 'thresholds.json')):
+        if flag:
+            t = json.loads(Path(flag).read_text())
+            if not {'t_low', 't_high'} <= set(t):
+                raise SystemExit(f'{flag} has no t_low / t_high')
+            (out / folder).mkdir(exist_ok=True)
+            shutil.copy2(flag, out / folder / name)
     if a.genimage_splits:
         n = copy_genimage(a.genimage_splits, a.genimage_root, out / 'genimage')
         say(f'GenImage: split CSVs copied, {n} test photos' + ('' if a.genimage_root else
@@ -283,6 +310,9 @@ def main(argv=None):
             a.no_code or (out / 'code' / 'VeriStamp' / 'm3_experiments' / 'settings.py').exists(),
         'm1/best.pt (for notebooks 11, 12)': (out / 'm1' / 'best.pt').exists(),
         'm1/vslib_m1_final (for 11, 12)': (out / 'm1' / 'vslib_m1_final' / 'vs_models.py').exists(),
+        'm2/best.pt (for 11, 12)': (out / 'm2' / 'best.pt').exists(),
+        'm2/thresholds.json': (out / 'm2' / 'thresholds.json').exists(),
+        'fusion/late_thresholds.json': (out / 'fusion' / 'late_thresholds.json').exists(),
         'genimage/splits (for 10 to 12)': (out / 'genimage' / 'splits' / 'test_unseen.csv').exists(),
         'genimage/images (for 10 to 12)': (out / 'genimage' / 'images').exists(),
     }
